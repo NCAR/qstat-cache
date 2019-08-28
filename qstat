@@ -1,0 +1,125 @@
+#!/bin/bash
+
+usage () {
+cat << EOF
+Usage: qstat [OPTIONS] [JOBID1 JOBID2...]
+
+This command provides a lightweight alternative to qstat. Data
+are queried and updated every minute from the PBS job scheduler.
+Options not listed here will be forwarded to the scheduler.
+Please use those options sparingly.
+
+Job IDs, if provided, should be numeric only and space delimited.
+
+Options:
+    -h, --help      display this help and exit
+    -l              disable labels (no header)
+    -n              display a list of nodes at the end of the line
+    -s              display administrator comment on the next line
+    -S, --status    filter jobs by specific single-character status code
+    -u, --user      filter jobs by the submitting user
+    -w, --wide      use wide format output (120 columns)
+    -x              include recently finished jobs in output
+EOF
+exit
+}
+
+USR=$(whoami)
+LOG=/glade/scratch/csgteam/qstatlogs/${USR}-$(date +%Y%m%d).log
+TS=$(date '+%H.%M:%S')
+HN=$(hostname)
+
+ARGLIST="$*"
+JOBLIST=
+USERSTR=
+DATAPATH=/glade/work/csgteam/qs_cache
+DATAFILE=joblist-default.dat
+COPER="!="
+NOLABELS=
+AWKOPT=print
+STATCODE=F
+
+# First log usage
+printf "%-10s %-10s %-10s %-10s %s\n" $TS $BN $HN $PPID "$ARGLIST" >> $LOG
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            ;;
+        -l)
+            NOLABELS=TRUE
+            ;;
+		-n)
+			DATAFILE=${DATAFILE/./-nodes.}
+            ;;
+		-s)
+            AWKOPT="for (i=1; i<=2; i++) {print; getline}"
+            DATAFILE=${DATAFILE/job/comm}
+			;;
+        -S|--status)
+            STATCODE="$2"
+            COPER="=="
+            shift; ;;
+        -u|--user)
+            USERSTR="$2"
+            shift; ;;
+        -w|--wide)
+            DATAFILE=${DATAFILE/default/wide}
+            ;;
+        -x)
+            STATCODE=
+            ;;
+		[0-9]*)
+			if [[ -z "$JOBLIST" ]]; then
+                JOBLIST="^${1}\."
+            else
+                JOBLIST="$JOBLIST|${1}\."
+            fi
+			;;
+        *)
+            sleep 1
+            /opt/pbs/bin/qstat $ARGLIST
+            exit $?
+            ;;
+	esac
+    shift
+done
+
+CMD="cat ${DATAPATH}/$DATAFILE"
+
+# Attach various filters to output
+if [[ ! -z "$STATCODE" ]]; then
+    CMD="$CMD | awk '\$10 $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
+fi
+
+if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
+    CMD="$CMD | awk '\$2 == \"${USERSTR:0:15}\" { $AWKOPT }'"
+fi
+
+if [[ ! -z "$JOBLIST" ]]; then
+    JOBLIST=${JOBLIST/\[\]/\\\[\\\]}
+    CMD="$CMD | awk '\$1 ~ /$JOBLIST/ { $AWKOPT }'"
+fi
+
+# Run command and limit output to that requested
+DATA="$(eval $CMD)"
+
+if [[ "${DATA}z" != z ]]; then
+    if [[ -z $NOLABELS ]]; then
+        if [[ $DATAFILE == *default* ]]; then
+            echo "                                                            Req'd  Req'd   Elap"
+            echo "Job ID          Username Queue    Jobname    SessID NDS TSK Memory Time  S Time"
+            echo "--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----"
+        else
+            echo "                                                                                                   Req'd  Req'd   Elap"
+            echo "Job ID                         Username        Queue           Jobname         SessID   NDS  TSK   Memory Time  S Time"
+            echo "------------------------------ --------------- --------------- --------------- -------- ---- ----- ------ ----- - -----"
+        fi
+    fi
+
+    echo -e "$DATA"
+else
+    exit 1
+fi
