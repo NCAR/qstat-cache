@@ -53,10 +53,12 @@ while [[ $# -gt 0 ]]; do
             ;;
 		-n)
 			DATAFILE=${DATAFILE/./-nodes.}
+            DATAFILE=${DATAFILE/default/info}
             ;;
 		-s)
             AWKOPT="for (i=1; i<=2; i++) {print; getline}"
             DATAFILE=${DATAFILE/job/comm}
+            DATAFILE=${DATAFILE/default/info}
 			;;
         -S|--status)
             STATCODE="$2"
@@ -67,6 +69,7 @@ while [[ $# -gt 0 ]]; do
             shift; ;;
         -w|--wide)
             DATAFILE=${DATAFILE/default/wide}
+            DATAFILE=${DATAFILE/info/wide}
             ;;
         -x)
             STATCODE=
@@ -79,6 +82,11 @@ while [[ $# -gt 0 ]]; do
             fi
 			;;
         *)
+            if [[ $(hostname) == casper* ]]; then
+                echo "Error: option $1 not supported on Casper"
+                exit 1
+            fi
+
             sleep 1
             /opt/pbs/bin/qstat $ARGLIST
             exit $?
@@ -89,13 +97,20 @@ done
 
 CMD="cat ${DATAPATH}/$DATAFILE"
 
+# Set column IDs
+if [[ $DATAFILE == *default* ]]; then
+    UCOL=3 SCOL=5
+else
+    UCOL=2 SCOL=10
+fi
+
 # Attach various filters to output
 if [[ ! -z "$STATCODE" ]]; then
-    CMD="$CMD | awk '\$10 $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
+    CMD="$CMD | awk '\$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
 fi
 
 if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
-    CMD="$CMD | awk '\$2 == \"${USERSTR:0:15}\" { $AWKOPT }'"
+    CMD="$CMD | awk '\$$UCOL == \"${USERSTR:0:8}\" { $AWKOPT }'"
 fi
 
 if [[ ! -z "$JOBLIST" ]]; then
@@ -109,6 +124,9 @@ DATA="$(eval $CMD)"
 if [[ "${DATA}z" != z ]]; then
     if [[ -z $NOLABELS ]]; then
         if [[ $DATAFILE == *default* ]]; then
+            echo "Job id            Name             User              Time Use S Queue"
+            echo "----------------  ---------------- ----------------  -------- - -----"
+        elif [[ $DATAFILE == *info* ]]; then
             echo "                                                            Req'd  Req'd   Elap"
             echo "Job ID          Username Queue    Jobname    SessID NDS TSK Memory Time  S Time"
             echo "--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----"
