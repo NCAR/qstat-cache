@@ -101,7 +101,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-CMD="cat ${DATAPATH}/$DATAFILE"
+CMD="cat $DATAPATH/$DATAFILE"
 
 # Set column IDs
 if [[ $DATAFILE == *default* ]]; then
@@ -124,7 +124,8 @@ if [[ ! -z "$JOBLIST" ]]; then
     CMD="$CMD | awk '\$1 ~ /$JOBLIST/ { $AWKOPT }'"
 fi
 
-# Run command and limit output to that requested
+# Run command and limit output to that requested (make sure file exists first)
+while [[ ! -f $DATAPATH/$DATAFILE ]]; do sleep 1; done
 DATA="$(eval $CMD)"
 
 if [[ "${DATA}z" != z ]]; then
