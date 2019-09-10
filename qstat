@@ -71,6 +71,7 @@ while [[ $# -gt 0 ]]; do
             COPER="=="
             shift; ;;
         -u|--user)
+            DATAFILE=${DATAFILE/default/info}
             USERSTR="$2"
             shift; ;;
         -w|--wide)
