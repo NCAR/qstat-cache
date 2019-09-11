@@ -1,17 +1,31 @@
 #!/bin/bash
 
-TMPPATH=/dev/shm
-ENDPATH=/glade/work/csgteam/qs_cache
+TMPPATH=/dev/shm/qscache-$$
+ENDPATH=/glade/work/vanderwb/qs_cache
 
-mkdir -p $ENDPATH
-cd $TMPPATH
+cd /dev/shm
 
 # Don't run if already running
-if [[ -f qscache-active ]]; then
+if [[ -f qscache-pcpid ]]; then
+    # If a minute has passed, end previous cycle
+    TELAP=$(($(date +%s) - $(date +%s -r qscache-pcpid)))
+
+    if [[ $TELAP -gt 60 ]]; then
+        PCPID=$(cat qscache-pcpid >& /dev/null)
+        
+        if kill -0 $PCPID 2> /dev/null; then
+            kill $PCPID
+        fi
+
+        rm -rf qscache-pcpid /dev/shm/qscache-$PCPID
+    fi
+
     exit
 fi
 
-touch qscache-active
+echo $$ > qscache-pcpid
+mkdir -p $TMPPATH $ENDPATH
+cd $TMPPATH
 
 # Get data from PBS (must run as csgteam)
 sudo -u csgteam /opt/pbs/bin/qstat -a -1 -n -s -w -x | sed '1,5d' > newlist-wide.dat &
@@ -41,4 +55,5 @@ wait
 
 # Move files to final storage
 mv *.dat $ENDPATH
-rm qscache-active
+cd ../
+rm -rf qscache-pcpid $TMPPATH
