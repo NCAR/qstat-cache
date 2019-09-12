@@ -42,6 +42,14 @@ STATCODE=F
 # First log usage
 printf "%-10s %-10s %-10s %-10s %s\n" $TS $BN $HN $PPID "$ARGLIST" >> $LOG
 
+# If cache is older than five minutes, warn and bypass
+CACHEAGE=$(($(date +%s) - $(date +%s -r $DATAPATH/$DATAFILE)))
+
+if [[ $CACHEAGE -ge 300 ]]; then
+    echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
+    QSCACHE_BYPASS=TRUE
+fi
+
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
     /opt/pbs/bin/qstat $@
@@ -90,7 +98,7 @@ while [[ $# -gt 0 ]]; do
 			;;
         *)
             if [[ $(hostname) == casper* ]]; then
-                echo "Error: option $1 not supported on Casper"
+                echo "Error: option $1 not supported on Casper" >&2
                 exit 1
             fi
 

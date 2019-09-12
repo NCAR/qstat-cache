@@ -1,7 +1,7 @@
 #!/bin/bash
 
 TMPPATH=/dev/shm/qscache-$$
-ENDPATH=/glade/work/vanderwb/qs_cache
+ENDPATH=/glade/work/$USER/qs_cache
 
 cd /dev/shm
 
