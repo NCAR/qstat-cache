@@ -33,7 +33,7 @@ ARGLIST="$*"
 JOBLIST=
 USERSTR=
 DATAPATH=/glade/work/csgteam/qs_cache
-DATAFILE=joblist-default.dat
+DATAFILE=joblist-default.dt
 COPER="!="
 NOLABELS=
 AWKOPT=print
@@ -133,9 +133,21 @@ if [[ ! -z "$JOBLIST" ]]; then
     CMD="$CMD | awk '\$1 ~ /$JOBLIST/ { $AWKOPT }'"
 fi
 
-# Run command and limit output to that requested (make sure file exists first)
-while [[ ! -f $DATAPATH/$DATAFILE ]]; do sleep 1; done
-DATA="$(eval $CMD)"
+# Run command and limit output to that requested (make sure command works)
+while true; do 
+    DATA=$(eval "$CMD; exit \${PIPESTATUS[0]}" 2>&1)
+
+    if [[ $? == 0 ]]; then
+        break
+    else
+        if [[ $QSCACHE_DEBUG == true ]]; then
+            echo -e "\nError at $(date):"
+            echo "$DATA"
+        fi
+
+        sleep 1
+    fi
+done
 
 if [[ "${DATA}z" != z ]]; then
     if [[ -z $NOLABELS ]]; then
