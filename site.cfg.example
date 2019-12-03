@@ -18,7 +18,7 @@ LOGPATH=/glade/scratch/csgteam/qstatlogs
 # The maximum wait time in seconds before the cache is
 # bypassed and the real qstat is called
 
-MAXWAIT=60
+MAXWAIT=20
 
 # Specify the location of the actual qstat command
 

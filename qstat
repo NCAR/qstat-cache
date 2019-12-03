@@ -63,7 +63,7 @@ function query_cache {
             break
         elif [[ $SECONDS -gt $MAXWAIT ]]; then
             echo -e "Cache data search timeout. Bypassing cache ...\n" >&2
-            $QSTATBIN $@
+            $QSTATBIN $ARGLIST
             exit $?
         else
             if [[ $QSCACHE_DEBUG == true ]]; then
@@ -92,7 +92,7 @@ fi
 
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
-    $QSTATBIN $@
+    $QSTATBIN $ARGLIST
     exit $?
 fi
 
@@ -174,6 +174,7 @@ if [[ ! -z "$JOBLIST" ]]; then
 fi
 
 # Get requested output
+query_cache
 
 if [[ "${DATA}z" != z ]]; then
     if [[ -z $NOLABELS ]]; then
