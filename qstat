@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Read in site-config (make edits in that file)
+SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
+MYPATH="$( cd "$(dirname "$0")" ; pwd )"
+
+if [[ ! -e $MYPATH/site.cfg ]]; then
+    echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
+    QSCACHE_BYPASS=true
+else
+    source $MYPATH/site.cfg
+
+    if [[ ! -d $DATAPATH ]]; then
+        echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
+        QSCACHE_BYPASS=true
+    fi
+
+    if [[ ${QSTATBIN}z == z ]]; then
+        echo "Fatal: qstat location not specified" >&2
+        exit 1
+    fi
+fi
+
 usage () {
 cat << EOF
 Usage: qstat [OPTIONS] [JOBID1 JOBID2...]
@@ -24,35 +45,54 @@ EOF
 exit
 }
 
-USR=$(whoami)
-LOG=/glade/scratch/csgteam/qstatlogs/${USR}-$(date +%Y%m%d).log
-TS=$(date '+%H.%M:%S')
-HN=$(hostname)
-
+# Internal variables
+JOBLIST= USERSTR= NOLABELS=
 ARGLIST="$*"
-JOBLIST=
-USERSTR=
-DATAPATH=/glade/work/csgteam/qs_cache
-DATAFILE=joblist-default.dt
+DATAFILE=joblist-default.dat
 COPER="!="
-NOLABELS=
 AWKOPT=print
 STATCODE=F
+HN=$(hostname)
+
+# Function to run a command on cache file, ensuring that cached file exists
+function query_cache {
+    while true; do 
+        DATA=$(eval "$CMD; exit \${PIPESTATUS[0]}" 2>&1)
+
+        if [[ $? == 0 ]]; then
+            break
+        elif [[ $SECONDS -gt $MAXWAIT ]]; then
+            echo -e "Cache data search timeout. Bypassing cache ...\n" >&2
+            $QSTATBIN $@
+            exit $?
+        else
+            if [[ $QSCACHE_DEBUG == true ]]; then
+                echo -e "\nError at $(date):"
+                echo "$DATA"
+            fi
+
+            sleep 1
+        fi
+    done
+}
 
 # First log usage
-printf "%-10s %-10s %-10s %-10s %s\n" $TS $BN $HN $PPID "$ARGLIST" >> $LOG
+if [[ -d $LOGPATH ]]; then
+    TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
+    printf "%-10s %-10s %-10s %s\n" $TS $HN $PPID "$ARGLIST" >> $LOGPATH/$LOGFILE
+fi
 
-# If cache is older than five minutes, warn and bypass
-CACHEAGE=$(($(date +%s) - $(date +%s -r $DATAPATH/$DATAFILE)))
+# If cache is missing or older than five minutes, warn and bypass
+CMD='expr $(date +%s) - $(cat $DATAPATH/updated)' query_cache
 
-if [[ $CACHEAGE -ge 300 ]]; then
+if [[ $DATA -ge 300 ]]; then
     echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
     QSCACHE_BYPASS=TRUE
 fi
 
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
-    /opt/pbs/bin/qstat $@
+    $QSTATBIN $@
     exit $?
 fi
 
@@ -97,13 +137,13 @@ while [[ $# -gt 0 ]]; do
             fi
 			;;
         *)
-            if [[ $(hostname) == casper* ]]; then
-                echo "Error: option $1 not supported on Casper" >&2
+            if [[ ! -f $QSTATBIN ]]; then
+                echo "Error: option $1 not supported on $HN" >&2
                 exit 1
             fi
 
             sleep 1
-            /opt/pbs/bin/qstat $ARGLIST
+            $QSTATBIN $ARGLIST
             exit $?
             ;;
 	esac
@@ -133,21 +173,7 @@ if [[ ! -z "$JOBLIST" ]]; then
     CMD="$CMD | awk '\$1 ~ /$JOBLIST/ { $AWKOPT }'"
 fi
 
-# Run command and limit output to that requested (make sure command works)
-while true; do 
-    DATA=$(eval "$CMD; exit \${PIPESTATUS[0]}" 2>&1)
-
-    if [[ $? == 0 ]]; then
-        break
-    else
-        if [[ $QSCACHE_DEBUG == true ]]; then
-            echo -e "\nError at $(date):"
-            echo "$DATA"
-        fi
-
-        sleep 1
-    fi
-done
+# Get requested output
 
 if [[ "${DATA}z" != z ]]; then
     if [[ -z $NOLABELS ]]; then

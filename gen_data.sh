@@ -1,9 +1,28 @@
 #!/bin/bash
 
-TMPPATH=/dev/shm/qscache-$$
-ENDPATH=/glade/work/$USER/qs_cache
+# Read in site-config (make edits in that file)
+DATAPATH= TMPPATH= QSTATBIN=
+MYPATH="$( cd "$(dirname "$0")" ; pwd )"
 
-cd /dev/shm
+if [[ ! -e $MYPATH/site.cfg ]]; then
+    echo "Fatal: No site config found for qstat-cache. ($(date))" >> $MYPATH/error.log
+    exit 1
+else
+    source $MYPATH/site.cfg
+
+    if [[ ! -d $TMPPATH ]]; then
+        echo "Fatal: temporary storage path does not exist. ($(date))" >> $MYPATH/error.log
+        exit 2
+    fi
+
+    if [[ ! -f $QSTATBIN ]]; then
+        echo "Fatal: real qstat binary not found. ($(date))" >> $MYPATH/error.log
+        exit 3
+    fi
+fi
+
+cd $TMPPATH
+TMPPATH=$TMPPATH/qscache-$$
 
 # Don't run if already running
 if [[ -f qscache-pcpid ]]; then
@@ -17,20 +36,20 @@ if [[ -f qscache-pcpid ]]; then
             kill $PCPID
         fi
 
-        rm -rf qscache-pcpid /dev/shm/qscache-$PCPID
+        rm -rf qscache-pcpid $TMPPATH/qscache-$PCPID
     fi
 
     exit
 fi
 
 echo $$ > qscache-pcpid
-mkdir -p $TMPPATH $ENDPATH
+mkdir -p $TMPPATH $DATAPATH
 cd $TMPPATH
 
-# Get data from PBS (must run as csgteam)
-sudo -u csgteam /opt/pbs/bin/qstat -a -1 -n -s -w -x | sed '1,5d' > newlist-wide.dat &
-sudo -u csgteam /opt/pbs/bin/qstat -1 -n -s -x | sed '1,5d' > newlist-info.dat &
-sudo -u csgteam /opt/pbs/bin/qstat -x | sed '1,5d' > newlist-default.dat &
+# Get data from PBS
+$PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '1,5d' > newlist-wide.dat &
+$PBSPREFIX $QSTATBIN -1 -n -s -x | sed '1,5d' > newlist-info.dat &
+$PBSPREFIX $QSTATBIN -x | sed '1,5d' > newlist-default.dat &
 
 wait
 
@@ -54,6 +73,9 @@ sed -r 's/([0-9].*) [-,r].*/\1/' joblist-info-nodes.dat > joblist-info.dat &
 wait
 
 # Move files to final storage
-mv *.dat $ENDPATH
+mv *.dat $DATAPATH
 cd ../
 rm -rf qscache-pcpid $TMPPATH
+
+# Update datestamp
+date +%s > $DATAPATH/updated
