@@ -1,16 +1,15 @@
-# Path where cached data will be created and read from
-# Choose a performant file system for these data
+# Path where cached data will be stored and accessed
 
-DATAPATH=/glade/work/csgteam/qs_cache
+DATAPATH=/glade/work/csgteam/qstat-cache/data
 
 # Temporary data path used by gen_data when creating
-# cached output from qstat
+# cached output from qstat (fast file system is best)
 
 TMPPATH=/dev/shm
 
 # Optional path for logging qstat invocations
 # If set, a log will be created for each user on each day
-# that records calls to qstat along with arguments
+#   that records calls to qstat along with arguments
 # If blank, logging will be disabled
 
 LOGPATH=/glade/scratch/csgteam/qstatlogs
@@ -29,3 +28,8 @@ QSTATBIN=/opt/pbs/bin/qstat
 # specify a prefix for PBS calls
 
 PBSPREFIX="sudo -u csgteam"
+
+# Specify the sub-minute frequency to generate data
+# in seconds
+
+GENFREQ=10

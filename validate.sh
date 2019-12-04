@@ -53,13 +53,14 @@ run_test 'TMPPATH is set' '[[ ! -z $TMPPATH ]]'
 run_test 'LOGPATH is set' '[[ ! -z $LOGPATH ]]' warn
 run_test 'MAXWAIT is set' '[[ ! -z $MAXWAIT ]]' warn
 run_test 'QSTATBIN is set' '[[ ! -z $QSTATBIN ]]'
+run_test 'GENFREQ is set' '[[ ! -z $GENFREQ ]]' warn
 
 # ----- gen_data.sh
 
 section 'RUNNING CACHE GENERATION TESTS'
 
 # Run gen_data using current site config
-./gen_data.sh
+DEBUG_CYCLE=true ./gen_data.sh
 
 run_test 'gen_data.sh runs without error' "[[ $? == 0 ]]"
 
