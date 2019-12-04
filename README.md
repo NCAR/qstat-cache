@@ -30,7 +30,7 @@ Options:
 1. Clone this repository on your system.
 2. Copy or rename the site.cfg.example file to site.cfg and edit the configuration settings.
 3. Run the `validate.sh` script to ensure your site.cfg is set up properly (*optional, but recommended*).
-4. Schedule the gen_data.sh script to run at regular intervals (typically via a cron job).
+4. Schedule the gen_data.sh script to run at regular intervals (typically every minute via a cron job).
 5. Add the cached version of `qstat` to your (and your users') environment PATH.
 
 ### site.cfg settings
@@ -66,8 +66,19 @@ QSTATBIN=/opt/pbs/bin/qstat
 # specify a prefix for PBS calls
 
 PBSPREFIX=
+
+# Specify the sub-minute frequency to generate data
+# in seconds
+
+GENFREQ=10
 ```
 
 ### Example crontab
 
-Here is a sample crontab that will run the gen_data.sh script every 10 seconds. The idea here is to run often enough that users and their workflows are satisfied, but not so often that we put our own load on PBS.
+Here is a sample crontab that will run the gen_data.sh script every minute (sub-minute scheduled is recommended and enabled via the site.cfg). The idea here is to run often enough that users and their workflows are satisfied, but not so often that we put our own load on PBS.
+
+```
+#   Run qstat cache generation script every minute
+#       Added by Joe User on 4 Dec 2019
+* * * * * /path/to/qstat_cache/gen_data.sh
+```
