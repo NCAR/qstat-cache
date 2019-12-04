@@ -202,7 +202,7 @@ fi
 
 # Print cache age in debug mode
 if [[ ${QSCACHE_DEBUG^^} == TRUE ]]; then
-    echo "Cached from: $(date -d @$DATA)"
+    echo -e "\nCached at: $(date -d @$CACHETIME)"
 fi
 
 exit $RVAL
