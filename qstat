@@ -133,9 +133,9 @@ while [[ $# -gt 0 ]]; do
             ;;
 		[0-9]*)
 			if [[ -z "$JOBLIST" ]]; then
-                JOBLIST="^${1} "
+                JOBLIST="^${1}[^ ]"
             else
-                JOBLIST="$JOBLIST|^${1} "
+                JOBLIST="$JOBLIST|^${1}[^ ]"
             fi
 			;;
         *)
