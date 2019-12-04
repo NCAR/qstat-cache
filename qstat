@@ -132,11 +132,10 @@ while [[ $# -gt 0 ]]; do
             STATCODE=
             ;;
 		[0-9]*)
-            JOBNUM=$(echo $1 | sed 's|\(^[0-9]*\)\..*|\1|')
 			if [[ -z "$JOBLIST" ]]; then
-                JOBLIST="^${JOBNUM}\."
+                JOBLIST="^${1} "
             else
-                JOBLIST="$JOBLIST|${JOBNUM}\."
+                JOBLIST="$JOBLIST|^${1} "
             fi
 			;;
         *)
