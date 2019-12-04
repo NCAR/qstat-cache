@@ -1,26 +1,5 @@
 #!/bin/bash
 
-# Read in site-config (make edits in that file)
-SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
-MYPATH=$(dirname $(readlink -f $0))
-
-if [[ ! -e $MYPATH/site.cfg ]]; then
-    echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
-    QSCACHE_BYPASS=true
-else
-    source $MYPATH/site.cfg
-
-    if [[ ! -d $DATAPATH ]]; then
-        echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
-        QSCACHE_BYPASS=true
-    fi
-
-    if [[ ${QSTATBIN}z == z ]]; then
-        echo "Fatal: qstat location not specified" >&2
-        exit 1
-    fi
-fi
-
 usage () {
 cat << EOF
 Usage: qstat [OPTIONS] [JOBID1 JOBID2...]
@@ -45,15 +24,6 @@ EOF
 exit
 }
 
-# Internal variables
-JOBLIST= USERSTR= NOLABELS=
-ARGLIST="$*"
-DATAFILE=joblist-default.dat
-COPER="!="
-AWKOPT=print
-STATCODE=F
-HN=$(hostname)
-
 # Function to run a command on cache file, ensuring that cached file exists
 function query_cache {
     while true; do 
@@ -76,19 +46,50 @@ function query_cache {
     done
 }
 
+# Read in site-config (make edits in that file)
+SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
+MYPATH=$(dirname $(readlink -f $0))
+
+if [[ ! -e $MYPATH/site.cfg ]]; then
+    echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
+    QSCACHE_BYPASS=true
+else
+    source $MYPATH/site.cfg
+
+    if [[ ! -d $DATAPATH ]]; then
+        echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
+        QSCACHE_BYPASS=true
+    else
+        # If cache is missing or older than five minutes, warn and bypass
+        CMD='cat $DATAPATH/updated' query_cache
+        CACHETIME=$DATA
+        CACHEAGE=$(expr $(date +%s) - $CACHETIME)
+
+        if [[ $CACHEAGE -ge 300 ]]; then
+            echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
+            QSCACHE_BYPASS=TRUE
+        fi
+    fi
+
+    if [[ ${QSTATBIN}z == z ]]; then
+        echo "Fatal: qstat location not specified" >&2
+        exit 1
+    fi
+fi
+
+# Internal variables
+JOBLIST= USERSTR= NOLABELS=
+ARGLIST="$*"
+DATAFILE=joblist-default.dat
+COPER="!="
+AWKOPT=print
+STATCODE=F
+HN=$(hostname)
+
 # First log usage
 if [[ -d $LOGPATH ]]; then
     TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
     printf "%-10s %-10s %-10s %s\n" $TS $HN $PPID "$ARGLIST" >> $LOGPATH/$LOGFILE
-fi
-
-# If cache is missing or older than five minutes, warn and bypass
-CMD='cat $DATAPATH/updated' query_cache
-CACHEAGE=$(expr $(date +%s) - $DATA)
-
-if [[ $CACHEAGE -ge 300 ]]; then
-    echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
-    QSCACHE_BYPASS=TRUE
 fi
 
 # Check for bypass setting
@@ -151,11 +152,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Print cache age in debug mode
-if [[ ${QSCACHE_DEBUG^^} == TRUE ]]; then
-    echo "Cached from: $(date -d @$DATA)"
-fi
-
 CMD="cat $DATAPATH/$DATAFILE"
 
 # Set column IDs
@@ -199,6 +195,14 @@ if [[ "${DATA}z" != z ]]; then
     fi
 
     echo -e "$DATA"
+    RVAL=0
 else
-    exit 1
+    RVAL=1
 fi
+
+# Print cache age in debug mode
+if [[ ${QSCACHE_DEBUG^^} == TRUE ]]; then
+    echo "Cached from: $(date -d @$DATA)"
+fi
+
+exit $RVAL
