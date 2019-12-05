@@ -82,3 +82,9 @@ Here is a sample crontab that will run the gen_data.sh script every minute (sub-
 #       Added by Joe User on 4 Dec 2019
 * * * * * /path/to/qstat_cache/gen_data.sh
 ```
+
+## Debugging
+
+There are two environment variables you may set to assist in debugging. Setting `QSCACHE_DEBUG` to `true` will cause qstat to print the error stream from the cache read command if it fails (otherwise this output is suppressed). It will also print the age of the cache, assuming it can be found.
+
+If you set `QSCACHE_BYPASS` to `true`, the cache will be bypassed regardless of which options are set, and the scheduler version of qstat will instead be called.
