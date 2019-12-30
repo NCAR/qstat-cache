@@ -54,13 +54,29 @@ function log_usage {
     fi
 }
 
+# Avoid infinite recursion
+if [[ $QSCACHE_RECURSION == true ]]; then
+    echo "Fatal: PBS qstat location could not be determined" >&2
+    exit 1
+fi
+
 # Read in site-config (make edits in that file)
 SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
 MYPATH=$(dirname $(readlink -f $0))
 
 if [[ ! -e $MYPATH/site.cfg ]]; then
     echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
-    QSCACHE_BYPASS=true
+
+    # Try to find PBS qstat
+    QSTATBIN=$(which --all qstat | tail -n1)
+    export QSCACHE_RECURSION=true
+
+    if [[ ! -z $QSTATBIN ]]; then
+        QSCACHE_BYPASS=true
+    else
+        echo "Fatal: PBS qstat location could not be determined" >&2
+        exit 1
+    fi
 else
     source $MYPATH/site.cfg
 
