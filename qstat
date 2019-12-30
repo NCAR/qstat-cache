@@ -46,6 +46,14 @@ function query_cache {
     done
 }
 
+# Function to log usage (accepts argument for whether cached call or not)
+function log_usage {
+    if [[ -d $LOGPATH ]]; then
+        TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
+        printf "%-10s %-10s %-10s %-10s %s\n" $TS $HN $PPID "cache=$1" "$ARGLIST" >> $LOGPATH/$LOGFILE
+    fi
+}
+
 # Read in site-config (make edits in that file)
 SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
 MYPATH=$(dirname $(readlink -f $0))
@@ -86,14 +94,9 @@ AWKOPT=print
 STATCODE=F
 HN=$(hostname)
 
-# First log usage
-if [[ -d $LOGPATH ]]; then
-    TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
-    printf "%-10s %-10s %-10s %s\n" $TS $HN $PPID "$ARGLIST" >> $LOGPATH/$LOGFILE
-fi
-
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
+    log_usage no
     $QSTATBIN $ARGLIST
     exit $?
 fi
@@ -145,6 +148,7 @@ while [[ $# -gt 0 ]]; do
             fi
 
             sleep 1
+            log_usage no
             $QSTATBIN $ARGLIST
             exit $?
             ;;
@@ -205,4 +209,5 @@ if [[ ${QSCACHE_DEBUG^^} == TRUE ]]; then
     echo -e "\nCached at: $(date -d @$CACHETIME)"
 fi
 
+log_usage yes
 exit $RVAL
