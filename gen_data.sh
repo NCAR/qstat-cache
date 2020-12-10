@@ -48,9 +48,9 @@ function main_gen {
     cd $TMPPATH
 
     # Get data from PBS
-    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '1,5d' > newlist-wide.dat &
-    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '1,5d' > newlist-info.dat &
-    $PBSPREFIX $QSTATBIN -x | sed '1,5d' > newlist-default.dat &
+    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
+    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
+    $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
 
     wait
 
