@@ -44,8 +44,8 @@ function run_test {
 
 section 'RUNNING SITE CONFIG TESTS'
 
-run_test 'site.cfg exists' '[[ -f site.cfg ]]'
-source site.cfg 2> /dev/null
+run_test 'site config exists' '[[ -f ${QSCACHE_CONFIG:=site.cfg} ]]'
+source $QSCACHE_CONFIG 2> /dev/null
 
 # Check if settings are defined
 run_test 'DATAPATH is set' '[[ ! -z $DATAPATH ]]'
