@@ -2,7 +2,7 @@
 
 usage () {
 cat << EOF
-Usage: qstat [OPTIONS] [JOBID1 JOBID2...]
+Usage: qstat [OPTIONS] [JOBID1 JOBID2...|DESTINATION]
 
 This command provides a lightweight alternative to qstat. Data
 are queried and updated every minute from the PBS job scheduler.
@@ -10,6 +10,8 @@ Options not listed here will be forwarded to the scheduler.
 Please use those options sparingly.
 
 Job IDs, if provided, should be numeric only and space delimited.
+If a destination is provided, it should be a valid execution
+queue on the current server.
 
 Options:
     -h, --help      display this help and exit
@@ -64,7 +66,7 @@ fi
 SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
 MYPATH=$(dirname $(readlink -f $0))
 
-if [[ ! -e $MYPATH/site.cfg ]]; then
+if [[ ! -e $MYPATH/${QSCACHE_CONFIG:=site.cfg} ]]; then
     echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
 
     # Try to find PBS qstat
@@ -78,7 +80,7 @@ if [[ ! -e $MYPATH/site.cfg ]]; then
         exit 1
     fi
 else
-    source $MYPATH/site.cfg
+    source $MYPATH/$QSCACHE_CONFIG
 
     if [[ ! -d $DATAPATH ]]; then
         echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
@@ -157,6 +159,13 @@ while [[ $# -gt 0 ]]; do
                 JOBLIST="$JOBLIST|^${1}[^ ]"
             fi
 			;;
+        [a-zA-Z]*)
+			if [[ -z "$JOBLIST" ]]; then
+                DESTLIST="^${1}[^ ]"
+            else
+                DESTLIST="$DESTLIST|^${1}[^ ]"
+            fi
+			;;
         *)
             if [[ ! -f $QSTATBIN ]]; then
                 echo "Error: option $1 not supported on $HN" >&2
@@ -176,9 +185,9 @@ CMD="cat $DATAPATH/$DATAFILE"
 
 # Set column IDs
 if [[ $DATAFILE == *default* ]]; then
-    UCOL=3 SCOL=5
+    UCOL=3 SCOL=5 DCOL=6
 else
-    UCOL=2 SCOL=10
+    UCOL=2 SCOL=10 DCOL=3
 fi
 
 # Attach various filters to output
@@ -193,6 +202,10 @@ fi
 if [[ ! -z "$JOBLIST" ]]; then
     JOBLIST=${JOBLIST/\[\]/\\\[\\\]}
     CMD="$CMD | awk '\$1 ~ /$JOBLIST/ { $AWKOPT }'"
+fi
+
+if [[ ! -z "$DESTLIST" ]]; then
+    CMD="$CMD | awk '\$$DCOL ~ /$DESTLIST/ { $AWKOPT }'"
 fi
 
 # Get requested output
