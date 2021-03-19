@@ -66,10 +66,10 @@ function main_gen {
     wait
 
     # Get versions without nodelist
-    sed -r 's/([0-9].*) [-,r].*/\1/' commlist-wide-nodes.dat > commlist-wide.dat &
-    sed -r 's/([0-9].*) [-,r].*/\1/' commlist-info-nodes.dat > commlist-info.dat &
-    sed -r 's/([0-9].*) [-,r].*/\1/' joblist-wide-nodes.dat > joblist-wide.dat &
-    sed -r 's/([0-9].*) [-,r].*/\1/' joblist-info-nodes.dat > joblist-info.dat &
+    sed 's|^\([0-9].*\) [^ ].*|\1|' commlist-wide-nodes.dat > commlist-wide.dat &
+    sed 's|^\([0-9].*\) [^ ].*|\1|' commlist-info-nodes.dat > commlist-info.dat &
+    sed 's|^\([0-9].*\) [^ ].*|\1|' joblist-wide-nodes.dat > joblist-wide.dat &
+    sed 's|^\([0-9].*\) [^ ].*|\1|' joblist-info-nodes.dat > joblist-info.dat &
 
     wait
 
