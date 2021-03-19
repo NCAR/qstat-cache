@@ -190,13 +190,17 @@ else
     UCOL=2 SCOL=10 DCOL=3
 fi
 
+if [[ $DATAFILE != *wide* ]]; then
+    USERSTR=${USERSTR:0:8}
+fi
+
 # Attach various filters to output
 if [[ ! -z "$STATCODE" ]]; then
-    CMD="$CMD | awk '\$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
+    CMD="$CMD | awk '\$$SCOL && \$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
 fi
 
 if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
-    CMD="$CMD | awk '\$$UCOL == \"${USERSTR:0:8}\" { $AWKOPT }'"
+    CMD="$CMD | awk '\$$UCOL == \"$USERSTR\" { $AWKOPT }'"
 fi
 
 if [[ ! -z "$JOBLIST" ]]; then
