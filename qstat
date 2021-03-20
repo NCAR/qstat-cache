@@ -2,7 +2,7 @@
 
 usage () {
 cat << EOF
-Usage: qstat [OPTIONS] [JOBID1 JOBID2...|DESTINATION]
+Usage: qstat [OPTIONS] [JOBID1 JOBID2...|DESTINATION] [@SERVER]
 
 This command provides a lightweight alternative to qstat. Data
 are queried and updated every minute from the PBS job scheduler.
@@ -11,7 +11,9 @@ Please use those options sparingly.
 
 Job IDs, if provided, should be numeric only and space delimited.
 If a destination is provided, it should be a valid execution
-queue on the current server.
+queue on the chosen server. This cached version of qstat does not
+allow mixed queries from multiple servers - only one server may
+be specified per request.
 
 Options:
     -h, --help      display this help and exit
@@ -24,6 +26,46 @@ Options:
     -x              include recently finished jobs in output
 EOF
 exit
+}
+
+# Function to load a server config (or site config if only one server)
+function load_config {
+    if [[ ! -e $MYPATH/${QSCACHE_SERVER:=site}.cfg ]]; then
+        echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
+
+        # Try to find PBS qstat
+        QSTATBIN=$(which --all qstat | tail -n1)
+        export QSCACHE_RECURSION=true
+
+        if [[ ! -z $QSTATBIN ]]; then
+            QSCACHE_BYPASS=true
+        else
+            echo "Fatal: PBS qstat location could not be determined" >&2
+            exit 1
+        fi
+    else
+        source $MYPATH/${QSCACHE_SERVER}.cfg
+
+        if [[ ! -d $DATAPATH ]]; then
+            echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
+            QSCACHE_BYPASS=true
+        else
+            # If cache is missing or older than five minutes, warn and bypass
+            CMD='cat $DATAPATH/updated' query_cache
+            CACHETIME=$DATA
+            CACHEAGE=$(expr $(date +%s) - $CACHETIME)
+
+            if [[ $CACHEAGE -ge 300 ]]; then
+                echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
+                QSCACHE_BYPASS=TRUE
+            fi
+        fi
+
+        if [[ ${QSTATBIN}z == z ]]; then
+            echo "Fatal: qstat location not specified" >&2
+            exit 1
+        fi
+    fi
 }
 
 # Function to run a command on cache file, ensuring that cached file exists
@@ -66,45 +108,8 @@ fi
 SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
 MYPATH=$(dirname $(readlink -f $0))
 
-if [[ ! -e $MYPATH/${QSCACHE_CONFIG:=site.cfg} ]]; then
-    echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
-
-    # Try to find PBS qstat
-    QSTATBIN=$(which --all qstat | tail -n1)
-    export QSCACHE_RECURSION=true
-
-    if [[ ! -z $QSTATBIN ]]; then
-        QSCACHE_BYPASS=true
-    else
-        echo "Fatal: PBS qstat location could not be determined" >&2
-        exit 1
-    fi
-else
-    source $MYPATH/$QSCACHE_CONFIG
-
-    if [[ ! -d $DATAPATH ]]; then
-        echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
-        QSCACHE_BYPASS=true
-    else
-        # If cache is missing or older than five minutes, warn and bypass
-        CMD='cat $DATAPATH/updated' query_cache
-        CACHETIME=$DATA
-        CACHEAGE=$(expr $(date +%s) - $CACHETIME)
-
-        if [[ $CACHEAGE -ge 300 ]]; then
-            echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
-            QSCACHE_BYPASS=TRUE
-        fi
-    fi
-
-    if [[ ${QSTATBIN}z == z ]]; then
-        echo "Fatal: qstat location not specified" >&2
-        exit 1
-    fi
-fi
-
 # Internal variables
-JOBLIST= USERSTR= NOLABELS=
+JOBLIST= USERSTR= NOLABELS= CUSTOMSERVER=
 ARGLIST="$*"
 DATAFILE=joblist-default.dat
 COPER="!="
@@ -114,6 +119,7 @@ HN=$(hostname)
 
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
+    load_config
     log_usage no
     $QSTATBIN $ARGLIST
     exit $?
@@ -166,9 +172,19 @@ while [[ $# -gt 0 ]]; do
                 DESTLIST="$DESTLIST|${1}"
             fi
 			;;
+        @*)
+            CUSTOM_SERVER=${1:1}
+
+            if [[ ! -f $MYPATH/${CUSTOM_SERVER}.cfg ]]; then
+                >&2 echo "Error: $CUSTOM_SERVER is not a valid server"
+                exit 1
+            fi
+            ;;
         *)
+            load_config
+
             if [[ ! -f $QSTATBIN ]]; then
-                echo "Error: option $1 not supported on $HN" >&2
+                >&2 echo "Error: option $1 not supported on $HN"
                 exit 1
             fi
 
@@ -180,6 +196,13 @@ while [[ $# -gt 0 ]]; do
 	esac
     shift
 done
+
+# Load chosen server config
+if [[ -n $CUSTOM_SERVER ]]; then
+    QSCACHE_SERVER=$CUSTOM_SERVER
+fi
+
+load_config
 
 CMD="cat $DATAPATH/$DATAFILE"
 
