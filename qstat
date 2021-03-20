@@ -30,6 +30,11 @@ exit
 
 # Function to load a server config (or site config if only one server)
 function load_config {
+    # Backward compatibility
+    if [[ -n $QSCACHE_CONFIG ]]; then
+        QSCACHE_SERVER=${QSCACHE_CONFIG%.*}
+    fi
+
     if [[ ! -e $MYPATH/${QSCACHE_SERVER:=site}.cfg ]]; then
         echo -e "No site config found for qstat-cache. Bypassing cache ...\n" >&2
 
