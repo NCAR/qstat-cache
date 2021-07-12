@@ -102,7 +102,7 @@ function query_cache {
 function log_usage {
     if [[ -d $LOGPATH ]]; then
         TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
-        printf "%-10s %-10s %-10s %-10s %-15s %s\n" $TS $HN $PPID "cache=$1" "$2" "$ARGLIST" >> $LOGPATH/$LOGFILE
+        printf "%-10s %-20s %-10s %-10s %-15s %s\n" $TS $HN $PPID "cache=$1" "$2" "$ARGLIST" >> $LOGPATH/$LOGFILE
     fi
 }
 
