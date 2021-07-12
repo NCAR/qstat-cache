@@ -44,6 +44,7 @@ function load_config {
 
         if [[ ! -z $QSTATBIN ]]; then
             QSCACHE_BYPASS=true
+            BYPASS_REASON=nocfg
         else
             echo "Fatal: PBS qstat location could not be determined" >&2
             exit 1
@@ -54,6 +55,7 @@ function load_config {
         if [[ ! -d $DATAPATH ]]; then
             echo -e "Specified data path does not exist. Bypassing cache ...\n" >&2
             QSCACHE_BYPASS=true
+            BYPASS_REASON=nodata
         else
             # If cache is missing or older than five minutes, warn and bypass
             CMD='cat $DATAPATH/updated' query_cache
@@ -62,7 +64,8 @@ function load_config {
 
             if [[ $CACHEAGE -ge 300 ]]; then
                 echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
-                QSCACHE_BYPASS=TRUE
+                QSCACHE_BYPASS=true
+                BYPASS_REASON=olddata
             fi
         fi
 
@@ -99,7 +102,7 @@ function query_cache {
 function log_usage {
     if [[ -d $LOGPATH ]]; then
         TS=$(date '+%H.%M:%S') LOGFILE=$(whoami)-$(date +%Y%m%d).log
-        printf "%-10s %-10s %-10s %-10s %s\n" $TS $HN $PPID "cache=$1" "$ARGLIST" >> $LOGPATH/$LOGFILE
+        printf "%-10s %-10s %-10s %-10s %-15s %s\n" $TS $HN $PPID "cache=$1" "$2" "$ARGLIST" >> $LOGPATH/$LOGFILE
     fi
 }
 
@@ -125,7 +128,7 @@ HN=$(hostname)
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
     load_config
-    log_usage no
+    log_usage no "reason=manual"
     $QSTATBIN $ARGLIST
     exit $?
 fi
@@ -199,7 +202,7 @@ while [[ $# -gt 0 ]]; do
             fi
 
             sleep 1
-            log_usage no
+            log_usage no "reason=args"
             $QSTATBIN $ARGLIST
             exit $?
             ;;
@@ -213,6 +216,12 @@ if [[ -n $CUSTOM_SERVER ]]; then
 fi
 
 load_config
+
+if [[ $QSCACHE_BYPASS == true ]]; then
+    log_usage no "reason=$BYPASS_REASON"
+    $QSTATBIN $ARGLIST
+    exit $?
+fi
 
 CMD="cat $DATAPATH/$DATAFILE"
 
