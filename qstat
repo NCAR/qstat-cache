@@ -20,9 +20,9 @@ Options:
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
-    -S, --status    filter jobs by specific single-character status code
-    -u, --user      filter jobs by the submitting user
-    -w, --wide      use wide format output (120 columns)
+    --status        filter jobs by specific single-character status code
+    -u              filter jobs by the submitting user
+    -w              use wide format output (120 columns)
     -x              include recently finished jobs in output
 EOF
 exit
@@ -139,6 +139,9 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             ;;
+        -a)
+            # Pass through since -a is assumed with default output
+            ;;
         -l)
             NOLABELS=TRUE
             ;;
@@ -151,15 +154,15 @@ while [[ $# -gt 0 ]]; do
             DATAFILE=${DATAFILE/job/comm}
             DATAFILE=${DATAFILE/default/info}
 			;;
-        -S|--status)
+        --status)
             STATCODE="$2"
             COPER="=="
             shift; ;;
-        -u|--user)
+        -u)
             DATAFILE=${DATAFILE/default/info}
             USERSTR="$2"
             shift; ;;
-        -w|--wide)
+        -w)
             DATAFILE=${DATAFILE/default/wide}
             DATAFILE=${DATAFILE/info/wide}
             ;;
