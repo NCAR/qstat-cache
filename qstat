@@ -236,7 +236,10 @@ else
 fi
 
 if [[ $DATAFILE != *wide* ]]; then
-    USERSTR=${USERSTR:0:8}
+    >&2 echo    "Warning: username is truncated in cached output; mismatched output possible"
+    >&2 echo -e "         use -w option for robust long username support\n"
+
+    USERSTR="${USERSTR:0:7}*"
 fi
 
 # Attach various filters to output
