@@ -235,7 +235,7 @@ else
     UCOL=2 SCOL=10 DCOL=3
 fi
 
-if [[ $DATAFILE != *wide* ]] && [[ -n $USERSTR ]]; then
+if [[ $DATAFILE != *wide* ]] && [[ ${#USERSTR} -gt 8 ]]; then
     >&2 echo    "Warning: username is truncated in cached output; mismatched output possible"
     >&2 echo -e "         use -w option for robust long username support\n"
 
