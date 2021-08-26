@@ -33,3 +33,9 @@ PBSPREFIX="sudo -u csgteam"
 # in seconds
 
 GENFREQ=10
+
+# Mapping of long-form server names for peer-scheduling
+# user queries (use qstat -Bf to get server names)
+
+SERVERMAP=" chadmin1.ib0.cheyenne.ucar.edu=cheyenne \
+            casper-pbs=casper   "
