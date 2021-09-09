@@ -46,7 +46,8 @@ function main_gen {
     function gen_kill {
         if [[ -d $LOGPATH ]]; then
             TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
-            printf "%-10s %-15s %s\n" $TS "cycle=$BASHPID" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
+            NJOBS=$(awk '$5 !~ "[FM]" {count++} END {print count}' newlist-default.dat 2> /dev/null)
+            printf "%-10s %-15s %-12s %s\n" $TS "cycle=$BASHPID" "jobs=${NJOBS:-n/a}" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
         fi
         
         exit 1
@@ -61,9 +62,9 @@ function main_gen {
 
     # Get data from PBS
     QSS_TIME=$SECONDS
-    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
-    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
     $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
+    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
+    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
 
     wait
 
