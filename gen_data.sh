@@ -22,7 +22,6 @@ else
 fi
 
 cd $TMPPATH
-TMPPATH=$TMPPATH/qscache-$$
 
 function main_gen {
     # Don't run if already running
@@ -43,7 +42,20 @@ function main_gen {
         exit
     fi
 
-    echo $$ > qscache-pcpid
+    # Register signal handler for forced kill
+    function gen_kill {
+        if [[ -d $LOGPATH ]]; then
+            TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
+            printf "%-10s %-15s %s\n" $TS "cycle=$BASHPID" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
+        fi
+        
+        exit 1
+    }
+
+    trap gen_kill SIGTERM
+
+    TMPPATH=$TMPPATH/qscache-$BASHPID
+    echo $BASHPID > qscache-pcpid
     mkdir -p $TMPPATH $DATAPATH
     cd $TMPPATH
 
@@ -57,7 +69,8 @@ function main_gen {
 
     if [[ -d $LOGPATH ]]; then
         TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
-        printf "%-10s %10s seconds\n" $TS $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
+        NJOBS=$(awk '$5 !~ "[FM]" {count++} END {print count}' newlist-default.dat)
+        printf "%-10s %-15s %-12s %10s seconds\n" $TS "cycle=$BASHPID" "jobs=$NJOBS" $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
     fi
 
     # Poor-man's sync
