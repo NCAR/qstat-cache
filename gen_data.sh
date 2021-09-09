@@ -4,11 +4,11 @@
 SECONDS=0 DATAPATH= TMPPATH= QSTATBIN= GENFREQ=60
 MYPATH="$( cd "$(dirname "$0")" ; pwd )"
 
-if [[ ! -e $MYPATH/${QSCACHE_CONFIG:=site.cfg} ]]; then
+if [[ ! -e $MYPATH/${QSCACHE_SERVER:=site.cfg} ]]; then
     echo "Fatal: No site config found for qstat-cache. ($(date))" >> $MYPATH/error.log
     exit 1
 else
-    source $MYPATH/$QSCACHE_CONFIG
+    source $MYPATH/$QSCACHE_SERVER
 
     if [[ ! -d $TMPPATH ]]; then
         echo "Fatal: temporary storage path does not exist. ($(date))" >> $MYPATH/error.log
