@@ -48,11 +48,17 @@ function main_gen {
     cd $TMPPATH
 
     # Get data from PBS
+    QSS_TIME=$SECONDS
     $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
     $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
     $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
 
     wait
+
+    if [[ -d $LOGPATH ]]; then
+        TS=$(date '+%H.%M:%S') LOGFILE=PBS-$(date +%Y%m%d).log
+        printf "%-10s %10s seconds\n" $TS $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
+    fi
 
     # Poor-man's sync
     mv newlist-wide.dat commlist-wide-nodes.dat
