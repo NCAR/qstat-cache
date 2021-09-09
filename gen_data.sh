@@ -4,11 +4,11 @@
 SECONDS=0 DATAPATH= TMPPATH= QSTATBIN= GENFREQ=60
 MYPATH="$( cd "$(dirname "$0")" ; pwd )"
 
-if [[ ! -e $MYPATH/${QSCACHE_SERVER:=site.cfg} ]]; then
+if [[ ! -e $MYPATH/${QSCACHE_SERVER:=site}.cfg ]]; then
     echo "Fatal: No site config found for qstat-cache. ($(date))" >> $MYPATH/error.log
     exit 1
 else
-    source $MYPATH/$QSCACHE_SERVER
+    source $MYPATH/${QSCACHE_SERVER}.cfg
 
     if [[ ! -d $TMPPATH ]]; then
         echo "Fatal: temporary storage path does not exist. ($(date))" >> $MYPATH/error.log
@@ -56,7 +56,7 @@ function main_gen {
     wait
 
     if [[ -d $LOGPATH ]]; then
-        TS=$(date '+%H.%M:%S') LOGFILE=PBS-$(date +%Y%m%d).log
+        TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
         printf "%-10s %10s seconds\n" $TS $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
     fi
 
