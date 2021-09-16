@@ -46,8 +46,8 @@ function main_gen {
     function gen_kill {
         if [[ -d $LOGPATH ]]; then
             TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
-            NJOBS=$(awk '$5 !~ "[FM]" {count++} END {print count}' newlist-default.dat 2> /dev/null)
-            printf "%-10s %-15s %-12s %s\n" $TS "cycle=$BASHPID" "jobs=${NJOBS:-n/a}" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
+            NJOBS=$(awk '$5 == "Q" {count++} END {print count}' newlist-default.dat 2> /dev/null)
+            printf "%-10s %-15s %-12s %s\n" $TS "cycle=$BASHPID" "queued=${NJOBS:-n/a}" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
         fi
         
         exit 1
@@ -70,8 +70,8 @@ function main_gen {
 
     if [[ -d $LOGPATH ]]; then
         TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
-        NJOBS=$(awk '$5 !~ "[FM]" {count++} END {print count}' newlist-default.dat)
-        printf "%-10s %-15s %-12s %10s seconds\n" $TS "cycle=$BASHPID" "jobs=$NJOBS" $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
+        NJOBS=$(awk '$5 == "Q" {count++} END {print count}' newlist-default.dat)
+        printf "%-10s %-15s %-12s %10s seconds\n" $TS "cycle=$BASHPID" "queued=$NJOBS" $((SECONDS - QSS_TIME)) >> $LOGPATH/$LOGFILE
     fi
 
     # Poor-man's sync
