@@ -62,10 +62,11 @@ function load_config {
             CACHETIME=$DATA
             CACHEAGE=$(expr $(date +%s) - $CACHETIME)
 
-            if [[ $CACHEAGE -ge 300 ]]; then
+            if [[ $CACHEAGE -ge $MAXAGE ]]; then
                 echo -e "Cached data is more than five minutes old. Bypassing cache ...\n" >&2
                 QSCACHE_BYPASS=true
                 BYPASS_REASON=olddata
+                BYPASS_DELAY=$AGEDELAY
             fi
         fi
 
@@ -85,6 +86,7 @@ function query_cache {
             break
         elif [[ $SECONDS -gt $MAXWAIT ]]; then
             echo -e "Cache data search timeout. Bypassing cache ...\n" >&2
+            log_usage no "reason=maxwait"
             $QSTATBIN $ARGLIST
             exit $?
         else
@@ -132,11 +134,12 @@ if [[ $QSCACHE_RECURSION == true ]]; then
     exit 1
 fi
 
-# Read in site-config (make edits in that file)
-SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 QSTATBIN=
-MYPATH=$(dirname $(readlink -f $0))
+# Defaults for site-config (make edits in that file)
+SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 MAXAGE=300
+QSTATBIN=
 
 # Internal variables
+MYPATH=$(dirname $(readlink -f $0))
 JOBLIST= USERSTR= NOLABELS= CUSTOMSERVER=
 ARGLIST="$*"
 DATAFILE=joblist-default.dat
@@ -144,6 +147,7 @@ COPER="!~"
 AWKOPT=print
 STATCODE="[FM]"
 HN=$(hostname)
+BYPASS_DELAY=0
 
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
@@ -236,6 +240,7 @@ load_config
 
 if [[ $QSCACHE_BYPASS == true ]]; then
     log_usage no "reason=$BYPASS_REASON"
+    sleep $BYPASS_DELAY
     $QSTATBIN $ARGLIST
     exit $?
 fi

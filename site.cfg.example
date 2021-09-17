@@ -19,6 +19,17 @@ LOGPATH=/glade/scratch/csgteam/qstatlogs
 
 MAXWAIT=20
 
+# The maximum allowed age in seconds of cache data. Beyond
+# this age we bypass the cache and call the true qstat
+
+MAXAGE=300
+
+# Delay in seconds to impose on qstat calls that bypass
+# the cache due to aged data. Increasing this value can help
+# the scheduler when under high load
+
+AGEDELAY=0
+
 # Specify the location of the actual qstat command
 
 QSTATBIN=/opt/pbs/bin/qstat
