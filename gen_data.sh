@@ -63,7 +63,7 @@ function main_gen {
     $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
     $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
     $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
-    $PBSPREFIX $QSTATBIN -x -f > joblist-full.dat &
+    $PBSPREFIX $QSTATBIN -f > joblist-full.dat &
 
     wait
 
