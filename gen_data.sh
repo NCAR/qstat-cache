@@ -26,17 +26,16 @@ cd $TMPPATH
 function main_gen {
     # Don't run if already running
     if [[ -f qscache-pcpid ]]; then
-        # If a minute has passed, end previous cycle
-        TELAP=$(($(date +%s) - $(date +%s -r qscache-pcpid)))
-
-        if [[ $TELAP -gt 60 ]]; then
-            PCPID=$(cat qscache-pcpid >& /dev/null)
-            
-            if kill -0 $PCPID 2> /dev/null; then
+        # If past max age, then kill last cycle since no longer useful
+        PCPID=$(cat qscache-pcpid 2> /dev/null)
+        
+        if kill -0 $PCPID 2> /dev/null; then
+            if [[ $(ps --no-headers -p $PCPID -o etimes) -ge ${MAXAGE:-300} ]]; then
                 kill $PCPID
+                rm -f qscache-pcpid
             fi
-
-            rm -rf qscache-pcpid $TMPPATH/qscache-$PCPID
+        else
+            rm -rf qscache-pcpid qscache-$PCPID
         fi
 
         exit
@@ -46,25 +45,25 @@ function main_gen {
     function gen_kill {
         if [[ -d $LOGPATH ]]; then
             TS=$(date '+%H.%M:%S') LOGFILE=PBS-${QSCACHE_SERVER^^}-$(date +%Y%m%d).log
-            NJOBS=$(awk '$5 == "Q" {count++} END {print count}' newlist-default.dat 2> /dev/null)
-            printf "%-10s %-15s %-12s %s\n" $TS "cycle=$BASHPID" "queued=${NJOBS:-n/a}" "failed after exceeding 60s limit" >> $LOGPATH/$LOGFILE
+            printf "%-10s %-15s %-12s %s\n" $TS "cycle=$BASHPID" "queued=n/a" "failed after exceeding ${MAXAGE:-300}s limit" >> $LOGPATH/$LOGFILE
         fi
-        
+       
+        cd $TMPPATH; rm -rf qscache-$BASHPID
         exit 1
     }
 
     trap gen_kill SIGTERM
 
-    TMPPATH=$TMPPATH/qscache-$BASHPID
     echo $BASHPID > qscache-pcpid
-    mkdir -p $TMPPATH $DATAPATH
-    cd $TMPPATH
+    mkdir -p qscache-$BASHPID $DATAPATH
+    cd qscache-$BASHPID
 
     # Get data from PBS
     QSS_TIME=$SECONDS
     $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
     $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
     $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
+    $PBSPREFIX $QSTATBIN -x -f > joblist-full.dat &
 
     wait
 
@@ -95,8 +94,7 @@ function main_gen {
 
     # Move files to final storage
     mv *.dat $DATAPATH
-    cd ../
-    rm -rf qscache-pcpid $TMPPATH
+    cd $TMPPATH; rm -rf qscache-pcpid qscache-$BASHPID
 
     # Update datestamp
     date +%s > $DATAPATH/updated
