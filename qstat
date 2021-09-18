@@ -17,6 +17,7 @@ be specified per request.
 
 Options:
     -h, --help      display this help and exit
+    -f              display full output for a job
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
@@ -166,8 +167,12 @@ while [[ $# -gt 0 ]]; do
         -a)
             # Pass through since -a is assumed with default output
             ;;
+        -f)
+            FULLMODE=true
+            DATAFILE=${DATAFILE/default/full}
+            ;;
         -l)
-            NOLABELS=TRUE
+            NOLABELS=true
             ;;
 		-n)
 			DATAFILE=${DATAFILE/./-nodes.}
@@ -212,7 +217,7 @@ while [[ $# -gt 0 ]]; do
                 CUSTOMSERVER=${1#*@} find_server
             fi
 
-			if [[ -z "$JOBLIST" ]]; then
+			if [[ -z "$DESTLIST" ]]; then
                 DESTLIST="${1%%@*}"
             else
                 DESTLIST="$DESTLIST|${1%%@*}"
@@ -235,6 +240,14 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# Historical full data requires bypass
+if [[ $FULLMODE == true ]]; then
+    if [[ -z $STATCODE ]] || [[ $STATCODE == F ]]; then
+        QSCACHE_BYPASS=true
+        BYPASS_REASON="args"
+    fi
+fi
+
 # Load chosen server config
 load_config
 
@@ -245,63 +258,89 @@ if [[ $QSCACHE_BYPASS == true ]]; then
     exit $?
 fi
 
-CMD="cat $DATAPATH/$DATAFILE"
+if [[ $FULLMODE == true ]]; then
+    if [[ -n $JOBLIST ]]; then
+        CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+    else
+        CMD="awk -vRS='' '/Job_Owner = $(id -u -n)/{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
 
-# Set column IDs
-if [[ $DATAFILE == *default* ]]; then
-    UCOL=3 SCOL=5 DCOL=6
-else
-    UCOL=2 SCOL=10 DCOL=3
-fi
-
-if [[ $DATAFILE != *wide* ]] && [[ ${#USERSTR} -gt 8 ]]; then
-    >&2 echo    "Warning: username is truncated in cached output; mismatched output possible"
-    >&2 echo -e "         use -w option for robust long username support\n"
-
-    USERSTR="${USERSTR:0:7}*"
-fi
-
-# Attach various filters to output
-if [[ ! -z "$STATCODE" ]]; then
-    CMD="$CMD | awk '\$$SCOL && \$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
-fi
-
-if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
-    CMD="$CMD | awk '\$$UCOL == \"$USERSTR\" { $AWKOPT }'"
-fi
-
-if [[ ! -z "$JOBLIST" ]]; then
-    JOBLIST=${JOBLIST/\[\]/\\\[\\\]}
-    CMD="$CMD | awk '\$1 ~ /^($JOBLIST)\./ { $AWKOPT }'"
-fi
-
-if [[ ! -z "$DESTLIST" ]]; then
-    CMD="$CMD | awk '\$$DCOL ~ /^($DESTLIST)$/ { $AWKOPT }'"
-fi
-
-# Get requested output
-query_cache
-
-if [[ "${DATA}z" != z ]]; then
-    if [[ -z $NOLABELS ]]; then
-        if [[ $DATAFILE == *default* ]]; then
-            echo "Job id            Name             User              Time Use S Queue"
-            echo "----------------  ---------------- ----------------  -------- - -----"
-        elif [[ $DATAFILE == *info* ]]; then
-            echo "                                                            Req'd  Req'd   Elap"
-            echo "Job ID          Username Queue    Jobname    SessID NDS TSK Memory Time  S Time"
-            echo "--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----"
-        else
-            echo "                                                                                                   Req'd  Req'd   Elap"
-            echo "Job ID                         Username        Queue           Jobname         SessID   NDS  TSK   Memory Time  S Time"
-            echo "------------------------------ --------------- --------------- --------------- -------- ---- ----- ------ ----- - -----"
+        if [[ -n $DESTLIST ]]; then
+            CMD="$CMD | awk -vRS='' '/queue = ($DESTLIST)/{print \$0\"\n\"}'"
         fi
     fi
 
-    echo -e "$DATA"
-    RVAL=0
+    if [[ $COPER == "~" ]]; then
+        CMD="$CMD | awk -vRS='' '/job_state = $STATCODE/{print \$0\"\n\"}'"
+    fi
+
+    # Get requested output
+    query_cache
+    
+    if [[ "${DATA}z" != z ]]; then
+        echo -e "$DATA"
+        RVAL=0
+    else
+        RVAL=1
+    fi
 else
-    RVAL=1
+    CMD="cat $DATAPATH/$DATAFILE"
+
+    # Set column IDs
+    if [[ $DATAFILE == *default* ]]; then
+        UCOL=3 SCOL=5 DCOL=6
+    else
+        UCOL=2 SCOL=10 DCOL=3
+    fi
+
+    if [[ $DATAFILE != *wide* ]] && [[ ${#USERSTR} -gt 8 ]]; then
+        >&2 echo    "Warning: username is truncated in cached output; mismatched output possible"
+        >&2 echo -e "         use -w option for robust long username support\n"
+
+        USERSTR="${USERSTR:0:7}*"
+    fi
+
+    # Attach various filters to output
+    if [[ ! -z "$STATCODE" ]]; then
+        CMD="$CMD | awk '\$$SCOL && \$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
+    fi
+
+    if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
+        CMD="$CMD | awk '\$$UCOL == \"$USERSTR\" { $AWKOPT }'"
+    fi
+
+    if [[ ! -z "$JOBLIST" ]]; then
+        JOBLIST=${JOBLIST/\[\]/\\\[\\\]}
+        CMD="$CMD | awk '\$1 ~ /^($JOBLIST)\./ { $AWKOPT }'"
+    fi
+
+    if [[ ! -z "$DESTLIST" ]]; then
+        CMD="$CMD | awk '\$$DCOL ~ /^($DESTLIST)$/ { $AWKOPT }'"
+    fi
+
+    # Get requested output
+    query_cache
+
+    if [[ "${DATA}z" != z ]]; then
+        if [[ -z $NOLABELS ]]; then
+            if [[ $DATAFILE == *default* ]]; then
+                echo "Job id            Name             User              Time Use S Queue"
+                echo "----------------  ---------------- ----------------  -------- - -----"
+            elif [[ $DATAFILE == *info* ]]; then
+                echo "                                                            Req'd  Req'd   Elap"
+                echo "Job ID          Username Queue    Jobname    SessID NDS TSK Memory Time  S Time"
+                echo "--------------- -------- -------- ---------- ------ --- --- ------ ----- - -----"
+            else
+                echo "                                                                                                   Req'd  Req'd   Elap"
+                echo "Job ID                         Username        Queue           Jobname         SessID   NDS  TSK   Memory Time  S Time"
+                echo "------------------------------ --------------- --------------- --------------- -------- ---- ----- ------ ----- - -----"
+            fi
+        fi
+
+        echo -e "$DATA"
+        RVAL=0
+    else
+        RVAL=1
+    fi
 fi
 
 # Print cache age in debug mode
