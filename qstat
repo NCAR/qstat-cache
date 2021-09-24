@@ -18,6 +18,7 @@ be specified per request.
 Options:
     -h, --help      display this help and exit
     -f              display full output for a job
+    -H              job output regardless of state or all finished jobs
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
@@ -171,6 +172,10 @@ while [[ $# -gt 0 ]]; do
             FULLMODE=true
             DATAFILE=${DATAFILE/default/full}
             ;;
+        -H)
+            HMODE=true
+            DATAFILE=${DATAFILE/default/info}
+            ;;
         -l)
             NOLABELS=true
             ;;
@@ -284,6 +289,15 @@ if [[ $FULLMODE == true ]]; then
     fi
 else
     CMD="cat $DATAPATH/$DATAFILE"
+
+    # H-mode behavior depends on whether job is specified
+    if [[ $COPER == "!~" ]] && [[ $HMODE == true ]]; then
+        if [[ -n $JOBLIST ]]; then
+            STATCODE=
+        else
+            COPER="~"
+        fi
+    fi
 
     # Set column IDs
     if [[ $DATAFILE == *default* ]]; then
