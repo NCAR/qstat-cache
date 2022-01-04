@@ -60,7 +60,7 @@ function load_config {
             BYPASS_REASON=nodata
         else
             # If cache is missing or older than five minutes, warn and bypass
-            CMD='cat $DATAPATH/updated' query_cache
+            CMD='grep --color=never "." $DATAPATH/updated' query_cache
             CACHETIME=$DATA
             CACHEAGE=$(expr $(date +%s) - $CACHETIME)
 
