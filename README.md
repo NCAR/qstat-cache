@@ -2,10 +2,10 @@
 A cached version of the PBS Pro qstat command that reduces load on the scheduler's database
 
 ## Details
-Most users run the qstat command at reasonable intervals and things work well. However, with the advent of workflow managers more users are running qstat at frequencies much too high for current versions of PBS Pro to support well. This utility creates a simple text-based cache of common qstat output and provides a script to serve that data to users. If an option is not cached (e.g., -f output), the query is sent to PBS's version of qstat for processing. Usage:
+Most users run the qstat command at reasonable intervals and things work well. However, with the advent of workflow managers more users are running qstat at frequencies much too high for current versions of PBS Pro to support well. This utility creates a simple text-based cache of common qstat output and provides a script to serve that data to users. If an option is not cached (e.g., -xf output), the query is sent to PBS's version of qstat for processing. Usage:
 
 ```
-Usage: qstat [OPTIONS] [JOBID1 JOBID2...]
+Usage: qstat [OPTIONS] [JOBID1 JOBID2...|DESTINATION] [@SERVER]
 
 This command provides a lightweight alternative to qstat. Data
 are queried and updated every minute from the PBS job scheduler.
@@ -13,15 +13,21 @@ Options not listed here will be forwarded to the scheduler.
 Please use those options sparingly.
 
 Job IDs, if provided, should be numeric only and space delimited.
+If a destination is provided, it should be a valid execution
+queue on the chosen server. This cached version of qstat does not
+allow mixed queries from multiple servers - only one server may
+be specified per request.
 
 Options:
     -h, --help      display this help and exit
+    -f              display full output for a job
+    -H              job output regardless of state or all finished jobs
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
-    -S, --status    filter jobs by specific single-character status code
-    -u, --user      filter jobs by the submitting user
-    -w, --wide      use wide format output (120 columns)
+    --status        filter jobs by specific single-character status code
+    -u              filter jobs by the submitting user
+    -w              use wide format output (120 columns)
     -x              include recently finished jobs in output
 ```
 
@@ -57,6 +63,17 @@ LOGPATH=
 
 MAXWAIT=20
 
+# The maximum allowed age in seconds of cache data. Beyond
+# this age we bypass the cache and call the true qstat
+
+MAXAGE=300
+
+# Delay in seconds to impose on qstat calls that bypass
+# the cache due to aged data. Increasing this value can help
+# the scheduler when under high load
+
+AGEDELAY=0
+
 # Specify the location of the actual qstat command
 
 QSTATBIN=/opt/pbs/bin/qstat
@@ -65,12 +82,17 @@ QSTATBIN=/opt/pbs/bin/qstat
 # command (e.g., a sudo operation). Use this variable to
 # specify a prefix for PBS calls
 
-PBSPREFIX=
+PBSPREFIX="sudo -u pbsadmin"
 
 # Specify the sub-minute frequency to generate data
 # in seconds
 
 GENFREQ=10
+
+# Mapping of long-form server names for peer-scheduling
+# user queries (use qstat -Bf to get server names)
+
+SERVERMAP=
 ```
 
 ### Example crontab
