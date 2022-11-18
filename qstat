@@ -130,6 +130,21 @@ function find_server {
     QSCACHE_SERVER=$CUSTOMSERVER
 }
 
+# Function to bypass caching if args are not understand
+function arg_bypass {
+    load_config
+
+    if [[ ! -f $QSTATBIN ]]; then
+        >&2 echo "Error: option $1 not supported on $HN"
+        exit 1
+    fi
+
+    sleep 1
+    log_usage no "reason=args"
+    $QSTATBIN $ARGLIST
+    exit $?
+}
+
 # Avoid infinite recursion
 if [[ $QSCACHE_RECURSION == true ]]; then
     echo "Fatal: PBS qstat location could not be determined" >&2
@@ -165,44 +180,65 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             ;;
-        -a)
-            # Pass through since -a is assumed with default output
+        -*)
+            FLAGOPTS=$1
+
+            while [[ -n $FLAGOPTS ]]; do
+                FLAGOPTS=${FLAGOPTS:1}
+
+                case ${FLAGOPTS:0:1} in
+                    a)
+                        # Pass through since -a is assumed with default output
+                        ;;
+                    f)
+                        FULLMODE=true
+                        DATAFILE=${DATAFILE/default/full}
+                        ;;
+                    H)
+                        HMODE=true
+                        DATAFILE=${DATAFILE/default/info}
+                        ;;
+                    l)
+                        NOLABELS=true
+                        ;;
+                    n)
+                        DATAFILE=${DATAFILE/./-nodes.}
+                        DATAFILE=${DATAFILE/default/info}
+                        ;;
+                    s)
+                        AWKOPT="for (i=1; i<=2; i++) {print; getline}"
+                        DATAFILE=${DATAFILE/job/comm}
+                        DATAFILE=${DATAFILE/default/info}
+                        ;;
+                    u)
+                        DATAFILE=${DATAFILE/default/info}
+
+                        if [[ $FLAGOPTS != u ]]; then
+                            USERSTR="${FLAGOPTS:1}"
+                        else
+                            USERSTR="$2"
+                            shift
+                        fi
+
+                        unset FLAGOPTS
+                        ;;
+                    w)
+                        DATAFILE=${DATAFILE/default/wide}
+                        DATAFILE=${DATAFILE/info/wide}
+                        ;;
+                    x)
+                        STATCODE=
+                        ;;
+                    *)
+                        arg_bypass
+                        ;;
+                esac
+            done
             ;;
-        -f)
-            FULLMODE=true
-            DATAFILE=${DATAFILE/default/full}
-            ;;
-        -H)
-            HMODE=true
-            DATAFILE=${DATAFILE/default/info}
-            ;;
-        -l)
-            NOLABELS=true
-            ;;
-		-n)
-			DATAFILE=${DATAFILE/./-nodes.}
-            DATAFILE=${DATAFILE/default/info}
-            ;;
-		-s)
-            AWKOPT="for (i=1; i<=2; i++) {print; getline}"
-            DATAFILE=${DATAFILE/job/comm}
-            DATAFILE=${DATAFILE/default/info}
-			;;
         --status)
             STATCODE="$2"
             COPER="~"
             shift; ;;
-        -u)
-            DATAFILE=${DATAFILE/default/info}
-            USERSTR="$2"
-            shift; ;;
-        -w)
-            DATAFILE=${DATAFILE/default/wide}
-            DATAFILE=${DATAFILE/info/wide}
-            ;;
-        -x)
-            STATCODE=
-            ;;
         @*)
             CUSTOMSERVER=${1:1} find_server
             ;;
@@ -229,17 +265,7 @@ while [[ $# -gt 0 ]]; do
             fi
 			;;
         *)
-            load_config
-
-            if [[ ! -f $QSTATBIN ]]; then
-                >&2 echo "Error: option $1 not supported on $HN"
-                exit 1
-            fi
-
-            sleep 1
-            log_usage no "reason=args"
-            $QSTATBIN $ARGLIST
-            exit $?
+            arg_bypass
             ;;
 	esac
     shift
