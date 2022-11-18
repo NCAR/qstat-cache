@@ -181,11 +181,9 @@ while [[ $# -gt 0 ]]; do
             usage
             ;;
         -*)
-            FLAGOPTS=$1
+            FLAGOPTS=${1:1}
 
             while [[ -n $FLAGOPTS ]]; do
-                FLAGOPTS=${FLAGOPTS:1}
-
                 case ${FLAGOPTS:0:1} in
                     a)
                         # Pass through since -a is assumed with default output
@@ -233,6 +231,8 @@ while [[ $# -gt 0 ]]; do
                         arg_bypass
                         ;;
                 esac
+
+                FLAGOPTS=${FLAGOPTS:1}
             done
             ;;
         --status)
