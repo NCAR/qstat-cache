@@ -60,9 +60,9 @@ function main_gen {
 
     # Get data from PBS
     QSS_TIME=$SECONDS
-    $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' > newlist-default.dat &
-    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' > newlist-info.dat &
-    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' > newlist-wide.dat &
+    $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-default.dat &
+    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-info.dat &
+    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-wide.dat &
     $PBSPREFIX $QSTATBIN -f > joblist-full.dat &
 
     wait
