@@ -81,6 +81,11 @@ function load_config {
 
 # Function to run a command on cache file, ensuring that cached file exists
 function query_cache {
+    if [[ $QSCACHE_DEBUG -ge 2 ]] && [[ $CMD != *updated* ]]; then
+        >&2 echo "===> Running $CMD"
+        echo
+    fi
+
     while true; do 
         DATA=$(eval "$CMD; exit \${PIPESTATUS[0]}" 2>&1)
 
@@ -92,9 +97,9 @@ function query_cache {
             $QSTATBIN $ARGLIST
             exit $?
         else
-            if [[ ${QSCACHE_DEBUG^^} == true ]]; then
-                echo -e "\nError at $(date):"
-                echo "$DATA"
+            if [[ $QSCACHE_DEBUG -ge 1 ]]; then
+                >&2 echo -e "\nError at $(date):"
+                >&2 echo "$DATA"
             fi
 
             sleep 1
@@ -191,6 +196,10 @@ while [[ $# -gt 0 ]]; do
                     f)
                         FULLMODE=true
                         DATAFILE=${DATAFILE/default/full}
+                        ;;
+                    F)
+                        FTYPE=${FLAGOPTS:1}
+                        unset FLAGOPTS
                         ;;
                     H)
                         HMODE=true
@@ -313,6 +322,13 @@ if [[ $FULLMODE == true ]]; then
     else
         RVAL=1
     fi
+elif [[ -n $FTYPE ]]; then
+    if [[ $FTYPE == json ]]; then
+        DATAFILE=${DATAFILE/default/fulljson}
+        python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE -j $JOBLIST -q $DESTLIST -u $USERSTR
+    else
+        arg_bypass
+    fi
 else
     CMD="cat $DATAPATH/$DATAFILE"
 
@@ -384,8 +400,8 @@ else
 fi
 
 # Print cache age in debug mode
-if [[ ${QSCACHE_DEBUG^^} == TRUE ]]; then
-    echo -e "\nCached at: $(date -d @$CACHETIME)"
+if [[ $QSCACHE_DEBUG -ge 1 ]]; then
+    >&2 echo -e "\nCached at: $(date -d @$CACHETIME)"
 fi
 
 log_usage yes

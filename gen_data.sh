@@ -63,7 +63,18 @@ function main_gen {
     $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-default.dat &
     $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-info.dat &
     $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-wide.dat &
-    $PBSPREFIX $QSTATBIN -f > joblist-full.dat &
+
+    if [[ " $CACHEFLAGS " == *" f "* ]]; then
+        $PBSPREFIX $QSTATBIN -f > joblist-full.dat &
+    else
+        rm -f joblist-full.dat
+    fi
+
+    if [[ " $CACHEFLAGS " == *" fjson "* ]]; then
+        $PBSPREFIX $QSTATBIN -f -F json > joblist-fulljson.dat &
+    else
+        rm -f joblist-fulljson
+    fi
 
     wait
 
