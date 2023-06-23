@@ -70,10 +70,10 @@ function main_gen {
         rm -f joblist-full.dat
     fi
 
-    if [[ " $CACHEFLAGS " == *" fjson "* ]]; then
+    if [[ " $CACHEFLAGS " == *" Fjson "* ]]; then
         $PBSPREFIX $QSTATBIN -f -F json > joblist-fulljson.dat &
     else
-        rm -f joblist-fulljson
+        rm -f joblist-fulljson.dat
     fi
 
     wait
