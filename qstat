@@ -52,6 +52,11 @@ function load_config {
             exit 1
         fi
     else
+        if [[ $QSCACHE_DEBUG -ge 2 ]]; then
+            >&2 echo "===> Sourcing config $MYPATH/${QSCACHE_SERVER}.cfg"
+            echo
+        fi
+        
         source $MYPATH/${QSCACHE_SERVER}.cfg
 
         if [[ ! -d $DATAPATH ]]; then
@@ -293,7 +298,7 @@ if [[ $QSCACHE_BYPASS == true ]]; then
 fi
 
 if [[ $FULLMODE == true ]]; then
-    if [[ " $CACHEOPTS " != *" f "* ]]; then
+    if [[ " $CACHEFLAGS " != *" f "* ]]; then
         bypass_cache args
     fi
 
@@ -321,7 +326,7 @@ if [[ $FULLMODE == true ]]; then
         RVAL=1
     fi
 elif [[ -n $FTYPE ]]; then
-    if [[ " $CACHEOPTS " != *" F${FTYPE} "* ]]; then
+    if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]]; then
         bypass_cache args
     fi
 
