@@ -135,17 +135,17 @@ function find_server {
     QSCACHE_SERVER=$CUSTOMSERVER
 }
 
-# Function to bypass caching if args are not understand
-function arg_bypass {
+# Function to bypass caching
+function bypass_cache {
     load_config
 
     if [[ ! -f $QSTATBIN ]]; then
-        >&2 echo "Error: option $1 not supported on $HN"
+        >&2 echo "Error: option $2 not supported on $HN"
         exit 1
     fi
 
-    sleep 1
-    log_usage no "reason=args"
+    sleep ${BYPASS_DELAY:-1}
+    log_usage no "reason=$1"
     $QSTATBIN $ARGLIST
     exit $?
 }
@@ -173,10 +173,7 @@ BYPASS_DELAY=0
 
 # Check for bypass setting
 if [[ ${QSCACHE_BYPASS^^} == TRUE ]]; then
-    load_config
-    log_usage no "reason=manual"
-    $QSTATBIN $ARGLIST
-    exit $?
+    bypass_cache manual
 fi
 
 # Parse command line arguments
@@ -237,7 +234,7 @@ while [[ $# -gt 0 ]]; do
                         STATCODE=
                         ;;
                     *)
-                        arg_bypass
+                        bypass_cache args $1
                         ;;
                 esac
 
@@ -274,7 +271,7 @@ while [[ $# -gt 0 ]]; do
             fi
 			;;
         *)
-            arg_bypass
+            bypass_cache args
             ;;
 	esac
     shift
@@ -292,13 +289,14 @@ fi
 load_config
 
 if [[ $QSCACHE_BYPASS == true ]]; then
-    log_usage no "reason=$BYPASS_REASON"
-    sleep $BYPASS_DELAY
-    $QSTATBIN $ARGLIST
-    exit $?
+    bypass_cache $BYPASS_REASON
 fi
 
 if [[ $FULLMODE == true ]]; then
+    if [[ " $CACHEOPTS " != *" f "* ]]; then
+        bypass_cache args
+    fi
+
     if [[ -n $JOBLIST ]]; then
         CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
     else
@@ -323,11 +321,13 @@ if [[ $FULLMODE == true ]]; then
         RVAL=1
     fi
 elif [[ -n $FTYPE ]]; then
+    if [[ " $CACHEOPTS " != *" F${FTYPE} "* ]]; then
+        bypass_cache args
+    fi
+
     if [[ $FTYPE == json ]]; then
         DATAFILE=${DATAFILE/default/fulljson}
         python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE -j $JOBLIST -q $DESTLIST -u $USERSTR
-    else
-        arg_bypass
     fi
 else
     CMD="cat $DATAPATH/$DATAFILE"
