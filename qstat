@@ -331,7 +331,7 @@ elif [[ -n $FTYPE ]]; then
     fi
 
     if [[ $FTYPE == json ]]; then
-        DATAFILE=${DATAFILE/default/fulljson}
+        DATAFILE=joblist-fulljson.dat
 
         if [[ -n $JOBLIST ]]; then
             JSOPTS="-j $JOBLIST"
