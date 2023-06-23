@@ -26,7 +26,7 @@ if args.jobs:
     data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if job.startswith(tuple(jobs)) }
 
 if args.queues:
-    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['queue'] in args.queues) }
+    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['queue'] in args.queues }
 
 if args.user:
     data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['Job_Owner'].startswith("{}@".format(args.user)) }
