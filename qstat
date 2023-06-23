@@ -332,7 +332,20 @@ elif [[ -n $FTYPE ]]; then
 
     if [[ $FTYPE == json ]]; then
         DATAFILE=${DATAFILE/default/fulljson}
-        python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE -j $JOBLIST -q $DESTLIST -u $USERSTR
+
+        if [[ -n $JOBLIST ]]; then
+            JSOPTS="-j $JOBLIST"
+        fi
+
+        if [[ -n $DESTLIST ]]; then
+            JSOPTS="$JSOPTS -q $DESTLIST"
+        fi
+
+        if [[ -n $USERSTR ]]; then
+            JSOPTS="$JSOPTS -u $USERSTR"
+        fi
+
+        python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
     fi
 else
     CMD="cat $DATAPATH/$DATAFILE"
