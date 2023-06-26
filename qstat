@@ -200,7 +200,17 @@ while [[ $# -gt 0 ]]; do
                         DATAFILE=${DATAFILE/default/full}
                         ;;
                     F)
-                        FTYPE=${FLAGOPTS:1}
+                        if [[ $FLAGOPTS != F ]]; then
+                            FTYPE="${FLAGOPTS:1}"
+                        else
+                            FTYPE="$2"
+                            shift
+                        fi
+
+                        if [[ " json " != *" $FTYPE "* ]]; then
+                            bypass_cache args -F$FTYPE
+                        fi
+
                         unset FLAGOPTS
                         ;;
                     H)
@@ -290,6 +300,12 @@ if [[ $FULLMODE == true ]]; then
     fi
 fi
 
+# Formatting requires fullmode
+if [[ -n $FTYPE ]] && [[ -z $FULLMODE ]]; then
+    QSCACHE_BYPASS=true
+    BYPASS_REASON="args"
+fi
+
 # Load chosen server config
 load_config
 
@@ -298,54 +314,56 @@ if [[ $QSCACHE_BYPASS == true ]]; then
 fi
 
 if [[ $FULLMODE == true ]]; then
-    if [[ " $CACHEFLAGS " != *" f "* ]]; then
-        bypass_cache args
-    fi
-
-    if [[ -n $JOBLIST ]]; then
-        CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
-    else
-        CMD="awk -vRS='' '/Job_Owner = $(id -u -n)/{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
-
-        if [[ -n $DESTLIST ]]; then
-            CMD="$CMD | awk -vRS='' '/queue = ($DESTLIST)/{print \$0\"\n\"}'"
+    if [[ -n $FTYPE ]]; then
+        if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]]; then
+            bypass_cache args
         fi
-    fi
 
-    if [[ $COPER == "~" ]]; then
-        CMD="$CMD | awk -vRS='' '/job_state = $STATCODE/{print \$0\"\n\"}'"
-    fi
+        if [[ $FTYPE == json ]]; then
+            DATAFILE=joblist-fulljson.dat
 
-    # Get requested output
-    query_cache
-    
-    if [[ "${DATA}z" != z ]]; then
-        echo -e "$DATA"
-        RVAL=0
+            if [[ -n $JOBLIST ]]; then
+                JSOPTS="-j $JOBLIST"
+            fi
+
+            if [[ -n $DESTLIST ]]; then
+                JSOPTS="$JSOPTS -q $DESTLIST"
+            fi
+
+            if [[ -n $USERSTR ]]; then
+                JSOPTS="$JSOPTS -u $USERSTR"
+            fi
+
+            python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
+        fi
     else
-        RVAL=1
-    fi
-elif [[ -n $FTYPE ]]; then
-    if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]] && [[ " $CACHEFLAGS " != *" f "* ]]; then
-        bypass_cache args
-    fi
-
-    if [[ $FTYPE == json ]]; then
-        DATAFILE=joblist-fulljson.dat
+        if [[ " $CACHEFLAGS " != *" f "* ]]; then
+            bypass_cache args
+        fi
 
         if [[ -n $JOBLIST ]]; then
-            JSOPTS="-j $JOBLIST"
+            CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+        else
+            CMD="awk -vRS='' '/Job_Owner = $(id -u -n)/{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+
+            if [[ -n $DESTLIST ]]; then
+                CMD="$CMD | awk -vRS='' '/queue = ($DESTLIST)/{print \$0\"\n\"}'"
+            fi
         fi
 
-        if [[ -n $DESTLIST ]]; then
-            JSOPTS="$JSOPTS -q $DESTLIST"
+        if [[ $COPER == "~" ]]; then
+            CMD="$CMD | awk -vRS='' '/job_state = $STATCODE/{print \$0\"\n\"}'"
         fi
 
-        if [[ -n $USERSTR ]]; then
-            JSOPTS="$JSOPTS -u $USERSTR"
-        fi
+        # Get requested output
+        query_cache
 
-        python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
+        if [[ "${DATA}z" != z ]]; then
+            echo -e "$DATA"
+            RVAL=0
+        else
+            RVAL=1
+        fi
     fi
 else
     CMD="cat $DATAPATH/$DATAFILE"
