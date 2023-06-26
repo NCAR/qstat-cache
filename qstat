@@ -326,7 +326,7 @@ if [[ $FULLMODE == true ]]; then
         RVAL=1
     fi
 elif [[ -n $FTYPE ]]; then
-    if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]]; then
+    if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]] && [[ " $CACHEFLAGS " != *" f "* ]]; then
         bypass_cache args
     fi
 
