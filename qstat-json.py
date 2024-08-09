@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import json, collections, argparse
+import json, collections, argparse, sys
 
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL) 
@@ -13,7 +13,10 @@ parser.add_argument("--user", "-u")
 args = parser.parse_args()
 
 with open(args.input_file, 'r') as f:
-    data = json.load(f, object_pairs_hook=collections.OrderedDict)
+    try:
+        data = json.load(f, object_pairs_hook=collections.OrderedDict)
+    except json.decoder.JSONDecodeError:
+        sys.exit(3)
 
 if args.jobs:
     jobs = []

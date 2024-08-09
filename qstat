@@ -335,6 +335,11 @@ if [[ $FULLMODE == true ]]; then
             fi
 
             python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
+
+            # Sometimes environment cruft from -V breaks Python json parsing
+            if [[ $? == 3 ]]; then
+                bypass_cache badjson
+            fi
         fi
     else
         if [[ " $CACHEFLAGS " != *" f "* ]]; then
