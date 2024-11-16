@@ -155,6 +155,21 @@ function bypass_cache {
     exit $?
 }
 
+# Function to check user/group membership
+function has_privilege {
+    if [[ " $PRIV_USERS " == *" ${MYUSER:-9999} "* ]]; then
+        return 0
+    else
+        for PRIV_GROUP in $PRIV_GROUPS; do
+            if [[ " ${MYGROUPS:-9999} " == *" $PRIV_GROUP "* ]]; then
+                return 0
+            fi
+        done
+    fi
+
+    return 1
+}
+
 # Avoid infinite recursion
 if [[ $QSCACHE_RECURSION == true ]]; then
     echo "Fatal: PBS qstat location could not be determined" >&2
@@ -163,10 +178,12 @@ fi
 
 # Defaults for site-config (make edits in that file)
 SECONDS=0 DATAPATH= LOGPATH= MAXWAIT=60 MAXAGE=300
-QSTATBIN=
+QSTATBIN= PRIV_USERS= PRIV_GROUPS=
 
 # Internal variables
 MYPATH=$(dirname $(readlink -f $0))
+MYUSER=$(id -un)
+MYGROUPS="$(id -Gn)"
 JOBLIST= USERSTR= NOLABELS= CUSTOMSERVER=
 ARGLIST="$*"
 DATAFILE=joblist-default.dat
@@ -187,13 +204,18 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             ;;
+        --status)
+            ARGLIST=${ARGLIST/--status $2}
+            STATCODE="$2"
+            COPER="~"
+            shift; ;;
         -*)
             FLAGOPTS=${1:1}
 
             while [[ -n $FLAGOPTS ]]; do
                 case ${FLAGOPTS:0:1} in
                     a)
-                        # Pass through since -a is assumed with default output
+                        SHOWALL=true
                         ;;
                     f)
                         FULLMODE=true
@@ -256,33 +278,33 @@ while [[ $# -gt 0 ]]; do
                 FLAGOPTS=${FLAGOPTS:1}
             done
             ;;
-        --status)
-            STATCODE="$2"
-            COPER="~"
-            shift; ;;
         @*)
             CUSTOMSERVER=${1:1} find_server
             ;;
+        *@*)
+            CUSTOMSERVER=${1##*@}
+            find_server
+            ;;&
 		[0-9]*)
-            if [[ $1 == *.* ]]; then
-                CUSTOMSERVER=${1#*.} find_server
+            JOBID=${1%%@*}
+
+            if [[ -z $CUSTOMSERVER ]] && [[ $JOBID == *.* ]]; then
+                CUSTOMSERVER=${JOBID#*.} find_server
             fi
 
 			if [[ -z "$JOBLIST" ]]; then
-                JOBLIST="${1%%.*}"
+                JOBLIST="${JOBID%%.*}"
             else
-                JOBLIST="$JOBLIST|${1%%.*}"
+                JOBLIST="$JOBLIST|${JOBID%%.*}"
             fi
 			;;
         [a-zA-Z]*)
-            if [[ $1 == *@* ]]; then
-                CUSTOMSERVER=${1#*@} find_server
-            fi
+            QUEUE=${1%%@*}
 
 			if [[ -z "$DESTLIST" ]]; then
-                DESTLIST="${1%%@*}"
+                DESTLIST="$QUEUE"
             else
-                DESTLIST="$DESTLIST|${1%%@*}"
+                DESTLIST="$DESTLIST|$QUEUE"
             fi
 			;;
         *)
@@ -313,6 +335,14 @@ if [[ $QSCACHE_BYPASS == true ]]; then
     bypass_cache $BYPASS_REASON
 fi
 
+if has_privilege; then
+    ACCESSALL=true
+else
+    SHOWALL=false
+    echo "Error: user does not have sufficient privilege to view records"
+    exit
+fi
+
 if [[ $FULLMODE == true ]]; then
     if [[ -n $FTYPE ]]; then
         if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]]; then
@@ -324,17 +354,35 @@ if [[ $FULLMODE == true ]]; then
 
             if [[ -n $JOBLIST ]]; then
                 JSOPTS="-j $JOBLIST"
+            else
+                if [[ $ACCESSALL == true ]]; then
+                    if [[ -n $DESTLIST ]]; then
+                        JSOPTS="$JSOPTS -q $DESTLIST"
+                    fi
+                else
+                    echo "Error: user does not have sufficient privilege to view records"
+                fi
+
+                if [[ -n $USERSTR ]]; then
+                    if [[ $USERSTR == $MYUSER ]] || [[ $ACCESSALL == true ]]; then
+                        JSOPTS="$JSOPTS -u $USERSTR"
+                    else
+                        echo "Error: user does not have sufficient privilege to view records"
+                    fi
+                elif [[ $ACCESSALL != true ]]; then
+                    JSOPTS="$JSOPTS -u $MYUSER"
+                fi
             fi
 
-            if [[ -n $DESTLIST ]]; then
-                JSOPTS="$JSOPTS -q $DESTLIST"
+            if [[ $COPER == "~" ]]; then
+                JSOPTS="$JSOPTS -s $STATCODE"
             fi
 
-            if [[ -n $USERSTR ]]; then
-                JSOPTS="$JSOPTS -u $USERSTR"
+            if [[ -n $JSOPTS ]] || [[ $ACCESSALL != true ]]; then
+                python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
+            else
+                cat $DATAPATH/$DATAFILE
             fi
-
-            python3 $MYPATH/qstat-json.py $DATAPATH/$DATAFILE $JSOPTS
 
             # Sometimes environment cruft from -V breaks Python json parsing
             if [[ $? == 3 ]]; then
@@ -349,7 +397,11 @@ if [[ $FULLMODE == true ]]; then
         if [[ -n $JOBLIST ]]; then
             CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
         else
-            CMD="awk -vRS='' '/Job_Owner = $(id -u -n)/{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+            if [[ $SHOWALL == true ]]; then
+                CMD="cat $DATAPATH/$DATAFILE"
+            else
+                CMD="awk -vRS='' '/Job_Owner = $MYUSER/{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+            fi
 
             if [[ -n $DESTLIST ]]; then
                 CMD="$CMD | awk -vRS='' '/queue = ($DESTLIST)/{print \$0\"\n\"}'"

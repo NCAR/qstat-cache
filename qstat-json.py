@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("input_file")
 parser.add_argument("--jobs", "-j", nargs='*')
 parser.add_argument("--queues", "-q", nargs='*')
+parser.add_argument("--status", "-s")
 parser.add_argument("--user", "-u")
 args = parser.parse_args()
 
@@ -33,5 +34,8 @@ if args.queues:
 
 if args.user:
     data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['Job_Owner'].startswith("{}@".format(args.user)) }
+
+if args.status:
+    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['job_state'] == args.status }
 
 print(json.dumps(data, indent = 4))
