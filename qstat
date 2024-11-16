@@ -17,7 +17,9 @@ be specified per request.
 
 Options:
     -h, --help      display this help and exit
+    -a              display all jobs (default unless -f specified)
     -f              display full output for a job
+    -Fjson          display full output in JSON format (use with -f)
     -H              job output regardless of state or all finished jobs
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
