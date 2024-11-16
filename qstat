@@ -335,15 +335,18 @@ if [[ $QSCACHE_BYPASS == true ]]; then
     bypass_cache $BYPASS_REASON
 fi
 
-if has_privilege; then
+if [[ ${PRIV_MODE:-false} == false ]] || has_privilege; then
     ACCESSALL=true
 else
-    SHOWALL=false
-    echo "Error: user does not have sufficient privilege to view records"
-    exit
+    ACCESSALL=false
 fi
 
 if [[ $FULLMODE == true ]]; then
+    if [[ $ACCESSALL == false ]] && [[ $SHOWALL == true ]]; then
+        >&2 echo "Error: user does not have sufficient privilege to view records (-a -f)"
+        exit 1
+    fi
+
     if [[ -n $FTYPE ]]; then
         if [[ " $CACHEFLAGS " != *" F${FTYPE} "* ]]; then
             bypass_cache args
@@ -355,19 +358,16 @@ if [[ $FULLMODE == true ]]; then
             if [[ -n $JOBLIST ]]; then
                 JSOPTS="-j $JOBLIST"
             else
-                if [[ $ACCESSALL == true ]]; then
-                    if [[ -n $DESTLIST ]]; then
-                        JSOPTS="$JSOPTS -q $DESTLIST"
-                    fi
-                else
-                    echo "Error: user does not have sufficient privilege to view records"
+                if [[ -n $DESTLIST ]]; then
+                    JSOPTS="$JSOPTS -q $DESTLIST"
                 fi
 
                 if [[ -n $USERSTR ]]; then
                     if [[ $USERSTR == $MYUSER ]] || [[ $ACCESSALL == true ]]; then
                         JSOPTS="$JSOPTS -u $USERSTR"
                     else
-                        echo "Error: user does not have sufficient privilege to view records"
+                        >&2 echo "Error: user does not have sufficient privilege to view records (-Fjson -u $USERSTR)"
+                        exit 1
                     fi
                 elif [[ $ACCESSALL != true ]]; then
                     JSOPTS="$JSOPTS -u $MYUSER"
