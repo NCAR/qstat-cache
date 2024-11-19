@@ -1,8 +1,14 @@
 # qstat-cache
-A cached version of the PBS Pro qstat command that reduces load on the scheduler's database
+A cached version of the PBS Pro qstat command that reduces load on the
+scheduler's database
 
 ## Details
-Most users run the qstat command at reasonable intervals and things work well. However, with the advent of workflow managers more users are running qstat at frequencies much too high for current versions of PBS Pro to support well. This utility creates a simple text-based cache of common qstat output and provides a script to serve that data to users. If an option is not cached (e.g., -xf output), the query is sent to PBS's version of qstat for processing. Usage:
+Most users run the qstat command at reasonable intervals and things work well.
+However, with the advent of workflow managers more users are running qstat at
+frequencies much too high for current versions of PBS Pro to support well. This
+utility creates a simple text-based cache of common qstat output and provides a
+script to serve that data to users. If an option is not cached (e.g., -xf
+output), the query is sent to PBS's version of qstat for processing. Usage:
 
 ```
 Usage: qstat [OPTIONS] [JOBID1 JOBID2...|DESTINATION] [@SERVER]
@@ -20,7 +26,9 @@ be specified per request.
 
 Options:
     -h, --help      display this help and exit
+    -a              display all jobs (default unless -f specified)
     -f              display full output for a job
+    -Fjson          display full output in JSON format (use with -f)
     -H              job output regardless of state or all finished jobs
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
@@ -34,9 +42,12 @@ Options:
 ## Installation
 
 1. Clone this repository on your system.
-2. Copy or rename the site.cfg.example file to site.cfg and edit the configuration settings.
-3. Run the `validate.sh` script to ensure your site.cfg is set up properly (*optional, but recommended*).
-4. Schedule the gen_data.sh script to run at regular intervals (typically every minute via a cron job).
+2. Copy or rename the site.cfg.example file to site.cfg and edit the
+   configuration settings.
+3. Run the `validate.sh` script to ensure your site.cfg is set up properly
+   (*optional, but recommended*).
+4. Schedule the gen_data.sh script to run at regular intervals (typically every
+   minute via a cron job).
 5. Add the cached version of `qstat` to your (and your users') environment PATH.
 
 ### site.cfg settings
@@ -93,20 +104,45 @@ GENFREQ=10
 # user queries (use qstat -Bf to get server names)
 
 SERVERMAP=
+
+# Which potentially expensive options do you want to enable
+
+CACHEFLAGS="f Fjson"
+
+# Enable privilege checking according to following user and
+# group settings. If false, all queries allowed.
+
+PRIV_MODE=true
+
+# Permit users and groups from these two lists respectively to
+# see "full" job output from other users (can contain sensitive
+# information if user is passing environment with -V)
+
+PRIV_USERS="root"
+PRIV_GROUPS="admins support"
 ```
 
 ### Example crontab
 
-Here is a sample crontab that will run the gen_data.sh script every minute (sub-minute scheduled is recommended and enabled via the site.cfg). The idea here is to run often enough that users and their workflows are satisfied, but not so often that we put our own load on PBS.
+Here is a sample crontab that will run the gen_data.sh script every minute
+(sub-minute scheduled is recommended and enabled via the site.cfg). The idea
+here is to run often enough that users and their workflows are satisfied, but
+not so often that we put our own load on PBS.
 
 ```
 #   Run qstat cache generation script every minute
 #       Added by Joe User on 4 Dec 2019
-* * * * * /path/to/qstat_cache/gen_data.sh
+* * * * * QSCACHE_SERVER=sitename /path/to/qstat_cache/gen_data.sh
 ```
 
 ## Debugging
 
-There are two environment variables you may set to assist in debugging. Setting `QSCACHE_DEBUG` to `true` will cause qstat to print the error stream from the cache read command if it fails (otherwise this output is suppressed). It will also print the age of the cache, assuming it can be found.
+There are two environment variables you may set to assist in debugging. Setting
+`QSCACHE_DEBUG` to `2` will cause qstat to print the error stream from the
+cache read command if it fails (otherwise this output is suppressed). If set to
+`1` or greater, qstat will also print the age of the cache, assuming it can be
+found.
 
-If you set `QSCACHE_BYPASS` to `true`, the cache will be bypassed regardless of which options are set, and the scheduler version of qstat will instead be called.
+If you set `QSCACHE_BYPASS` to `true`, the cache will be bypassed regardless of
+which options are set, and the scheduler version of qstat will instead be
+called.

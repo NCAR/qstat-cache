@@ -50,3 +50,20 @@ GENFREQ=10
 
 SERVERMAP=" chadmin1.ib0.cheyenne.ucar.edu=cheyenne \
             casper-pbs=casper   "
+
+# Which potentially expensive options do you want to enable
+
+CACHEFLAGS="f Fjson"
+
+# Enable privilege checking according to following user and
+# group settings. If false, all queries allowed.
+
+PRIV_MODE=true
+
+# Permit users and groups from these two lists respectively to
+# see "full" job output from other users (can contain sensitive
+# information if user is passing environment with -V)
+
+PRIV_USERS="root"
+PRIV_GROUPS="admins support"
+```
