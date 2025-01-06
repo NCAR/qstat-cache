@@ -74,7 +74,8 @@ function main_gen {
         # Messy sed command fixes observed JSON errors from user environment variables:
         #   1. Numbers after a number 0 (octal) that aren't strings
         #   2. Trailing decimal points in numbers
-        $PBSPREFIX $QSTATBIN -f -F json | sed 's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/' > joblist-fulljson.dat &
+        #   3. Numbers that begin with a decimal point
+        $PBSPREFIX $QSTATBIN -f -F json | sed 's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/; s/":\(\.[^,]*\)/":"\1"/' > joblist-fulljson.dat &
     else
         rm -f joblist-fulljson.dat
     fi
