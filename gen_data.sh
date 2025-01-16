@@ -60,12 +60,12 @@ function main_gen {
 
     # Get data from PBS
     QSS_TIME=$SECONDS
-    $PBSPREFIX $QSTATBIN -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-default.dat &
-    $PBSPREFIX $QSTATBIN -1 -n -s -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-info.dat &
-    $PBSPREFIX $QSTATBIN -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-wide.dat &
+    $PBSPREFIX $QSTATBIN -t -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-default.dat &
+    $PBSPREFIX $QSTATBIN -t -1 -n -s -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-info.dat &
+    $PBSPREFIX $QSTATBIN -t -a -1 -n -s -w -x | sed '/^[0-9]/,$!d' | sed 's/\([0-9]\+\) b/ \1b/' > newlist-wide.dat &
 
     if [[ " $CACHEFLAGS " == *" f "* ]]; then
-        $PBSPREFIX $QSTATBIN -f > joblist-full.dat &
+        $PBSPREFIX $QSTATBIN -t -f > joblist-full.dat &
     else
         rm -f joblist-full.dat
     fi
@@ -75,7 +75,7 @@ function main_gen {
         #   1. Numbers after a number 0 (octal) that aren't strings
         #   2. Trailing decimal points in numbers
         #   3. Numbers that begin with a decimal point
-        $PBSPREFIX $QSTATBIN -f -F json | sed 's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/; s/":\(\.[^,]*\)/":"\1"/' > joblist-fulljson.dat &
+        $PBSPREFIX $QSTATBIN -t -f -F json | sed 's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/; s/":\(\.[^,]*\)/":"\1"/' > joblist-fulljson.dat &
     else
         rm -f joblist-fulljson.dat
     fi
