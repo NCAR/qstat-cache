@@ -30,10 +30,12 @@ Options:
     -f              display full output for a job
     -Fjson          display full output in JSON format (use with -f)
     -H              job output regardless of state or all finished jobs
+    -J              only show information for jobs (or subjobs with -t)
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
     --status        filter jobs by specific single-character status code
+    -t              show information for both jobs and array subjobs
     -u              filter jobs by the submitting user
     -w              use wide format output (120 columns)
     -x              include recently finished jobs in output

@@ -21,10 +21,12 @@ Options:
     -f              display full output for a job
     -Fjson          display full output in JSON format (use with -f)
     -H              job output regardless of state or all finished jobs
+    -J              only show information for jobs (or subjobs with -t)
     -l              disable labels (no header)
     -n              display a list of nodes at the end of the line
     -s              display administrator comment on the next line
     --status        filter jobs by specific single-character status code
+    -t              show information for both jobs and array subjobs
     -u              filter jobs by the submitting user
     -w              use wide format output (120 columns)
     -x              include recently finished jobs in output
@@ -241,6 +243,10 @@ while [[ $# -gt 0 ]]; do
                         HMODE=true
                         DATAFILE=${DATAFILE/default/info}
                         ;;
+                    J)
+                        JMODE=true
+                        JSOPTS="-J $JSOPTS"
+                        ;;
                     l)
                         NOLABELS=true
                         ;;
@@ -252,6 +258,10 @@ while [[ $# -gt 0 ]]; do
                         AWKOPT="for (i=1; i<=2; i++) {print; getline}"
                         DATAFILE=${DATAFILE/job/comm}
                         DATAFILE=${DATAFILE/default/info}
+                        ;;
+                    t)
+                        SUBJOBS=true
+                        JSOPTS="-t $JSOPTS"
                         ;;
                     u)
                         DATAFILE=${DATAFILE/default/info}
@@ -288,7 +298,11 @@ while [[ $# -gt 0 ]]; do
             find_server
             ;;&
 		[0-9]*)
-            JOBID=${1%%@*}
+            if [[ $1 == *\[[0-9]*\]* ]]; then
+                JOBID=$(sed 's/\[/\\\[/; s/\]/\\\]/' <<< ${1%%@*})
+            else
+                JOBID=$(sed 's/\[\]/\\[\[0-9\]\*\\]/' <<< ${1%%@*})
+            fi
 
             if [[ -z $CUSTOMSERVER ]] && [[ $JOBID == *.* ]]; then
                 CUSTOMSERVER=${JOBID#*.} find_server
@@ -358,7 +372,7 @@ if [[ $FULLMODE == true ]]; then
             DATAFILE=joblist-fulljson.dat
 
             if [[ -n $JOBLIST ]]; then
-                JSOPTS="-j $JOBLIST"
+                JSOPTS="$JSOPTS -j $JOBLIST"
             else
                 if [[ -n $DESTLIST ]]; then
                     JSOPTS="$JSOPTS -q $DESTLIST"
@@ -397,7 +411,7 @@ if [[ $FULLMODE == true ]]; then
         fi
 
         if [[ -n $JOBLIST ]]; then
-            CMD="awk -vRS='' '/Job Id: ($JOBLIST)./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
+            CMD="awk -vRS='' '/Job Id: ($JOBLIST)\./{print \$0\"\n\"}' $DATAPATH/$DATAFILE"
         else
             if [[ $SHOWALL == true ]]; then
                 CMD="cat $DATAPATH/$DATAFILE"
@@ -412,6 +426,14 @@ if [[ $FULLMODE == true ]]; then
 
         if [[ $COPER == "~" ]]; then
             CMD="$CMD | awk -vRS='' '/job_state = $STATCODE/{print \$0\"\n\"}'"
+        fi
+
+        if [[ $SUBJOBS == true ]]; then
+            if [[ $JMODE == true ]]; then
+                CMD="$CMD | awk -vRS='' '/Job Id:.*\[[0-9]+\]/{print \$0\"\n\"}'"
+            fi
+        else
+            CMD="$CMD | awk -vRS='' '!/Job Id:.*\[[0-9]+\]/{print \$0\"\n\"}'"
         fi
 
         # Get requested output
@@ -453,19 +475,32 @@ else
     # Attach various filters to output
     if [[ ! -z "$STATCODE" ]]; then
         CMD="$CMD | awk '\$$SCOL && \$$SCOL $COPER \"$STATCODE\" && \$1 ~ /^[0-9]/ { $AWKOPT }'"
+        AWKOPT=print
     fi
 
     if [[ ! -z "$USERSTR" ]] && [[ ${USERSTR^^} != ALL ]]; then
         CMD="$CMD | awk '\$$UCOL == \"$USERSTR\" { $AWKOPT }'"
+        AWKOPT=print
     fi
 
     if [[ ! -z "$JOBLIST" ]]; then
-        JOBLIST=${JOBLIST/\[\]/\\\[\\\]}
         CMD="$CMD | awk '\$1 ~ /^($JOBLIST)\./ { $AWKOPT }'"
+        AWKOPT=print
     fi
 
     if [[ ! -z "$DESTLIST" ]]; then
         CMD="$CMD | awk '\$$DCOL ~ /^($DESTLIST)$/ { $AWKOPT }'"
+        AWKOPT=print
+    fi
+
+    if [[ $SUBJOBS == true ]]; then
+        if [[ $JMODE == true ]]; then
+            CMD="$CMD | awk '\$1 ~ /\[[0-9]+\]/ { $AWKOPT }'"
+            AWKOPT=print
+        fi
+    else
+        CMD="$CMD | awk '\$1 !~ /\[[0-9]+\]/ { $AWKOPT }'"
+        AWKOPT=print
     fi
 
     # Get requested output
