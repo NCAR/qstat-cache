@@ -45,8 +45,8 @@ if args.status:
 
 if args.arrays:
     if args.filter:
-        data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if "array_index" in data['Jobs'][job] }
+        data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if re.search("\[[0-9]+\]", job) }
 else:
-    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if "array_index" not in data['Jobs'][job] }
+    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if not re.search("\[[0-9]+\]", job) }
 
 print(json.dumps(data, indent = 4))

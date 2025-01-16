@@ -430,10 +430,10 @@ if [[ $FULLMODE == true ]]; then
 
         if [[ $SUBJOBS == true ]]; then
             if [[ $JMODE == true ]]; then
-                CMD="$CMD | awk -vRS='' '/array_index = [0-9]*/{print \$0\"\n\"}'"
+                CMD="$CMD | awk -vRS='' '/Job Id:.*\[[0-9]+\]/{print \$0\"\n\"}'"
             fi
         else
-            CMD="$CMD | awk -vRS='' '!/array_index = [0-9]*/{print \$0\"\n\"}'"
+            CMD="$CMD | awk -vRS='' '!/Job Id:.*\[[0-9]+\]/{print \$0\"\n\"}'"
         fi
 
         # Get requested output
