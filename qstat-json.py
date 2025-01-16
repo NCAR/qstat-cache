@@ -27,9 +27,12 @@ if args.jobs:
         if "." in job:
             jobs.append(job)
         else:
-            jobs.append("{}.".format(job))
+            jobs.append("{}\.".format(job))
 
-    data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if any([re.match(jid, job) for jid in jobs]) }
+    try:
+        data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if any([re.match(jid, job) for jid in jobs]) }
+    except:
+        sys.exit(3)
 
 if args.queues:
     data['Jobs'] = { job : data['Jobs'][job] for job in data['Jobs'].keys() if data['Jobs'][job]['queue'] in args.queues }

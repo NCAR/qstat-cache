@@ -298,7 +298,11 @@ while [[ $# -gt 0 ]]; do
             find_server
             ;;&
 		[0-9]*)
-            JOBID=$(sed 's/\[\]/\\[\[0-9\]\*\\]/' <<< ${1%%@*})
+            if [[ $1 == *\[[0-9]*\]* ]]; then
+                JOBID=$(sed 's/\[/\\\[/; s/\]/\\\]/' <<< ${1%%@*})
+            else
+                JOBID=$(sed 's/\[\]/\\[\[0-9\]\*\\]/' <<< ${1%%@*})
+            fi
 
             if [[ -z $CUSTOMSERVER ]] && [[ $JOBID == *.* ]]; then
                 CUSTOMSERVER=${JOBID#*.} find_server
