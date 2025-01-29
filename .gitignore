@@ -1,2 +1,4 @@
-*.cfg
-*/
+data
+temp
+logs
+*__pycache__*
