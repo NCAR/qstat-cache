@@ -4,12 +4,22 @@ import os, sys, re, json, collections
 from datetime import datetime
 
 help_text = """This command provides a lightweight alternative to qstat. Data
-are queried and updated every minute from the PBS job scheduler.  Options not
-listed here will be forwarded to the scheduler.  Please use those options
-sparingly. Job IDs, if provided, should be numeric only and space delimited.  If
+are queried and updated every minute from the PBS job scheduler. Options not
+listed here will be forwarded to the scheduler. Please use those options
+sparingly. Job IDs, if provided, should be numeric only and space delimited. If
 a destination is provided, it should be a valid execution queue on the chosen
 server. This cached version of qstat does not allow mixed queries from multiple
 servers - only one server may be specified per request."""
+
+format_help = """This option allows you to provide a format string that
+specifies a custom set of fields to display, along with column widths. All
+fields are string type, so only string formatting is allowed. Any field shown
+by the -f option can be used.
+
+The default format string for default mode output is:
+
+{Job_Id:17} {Job_Name:16} {Job_Owner:16} {resources_used[cput]:>8} {job_state:1} {queue:16}
+"""
 
 def log_usage(config, used_cache, info):
     if "log" in config["run"]:
@@ -229,8 +239,13 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
             super().__init__(dictionary)
 
         def __missing__(self, key):
-            if key == "resources_used":
-                return altair_dict({}, fill_value = self.fill_value)
+            if key in ["resources_used", "Resource_List"]:
+                if "{}" in self.fill_value:
+                    return altair_dict({}, fill_value = "{}.{{}}".format(key))
+                else:
+                    return altair_dict({}, fill_value = self.fill_value)
+            elif "{}" in self.fill_value:
+                return self.fill_value.format(key)
             else:
                 return self.fill_value
 
@@ -240,7 +255,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
         label_fields = fields.replace(">", "")
 
         if mode == "default":
-            labels = {
+            labels = altair_dict({
                     "Job_Id"            : "Job id",
                     "Job_Name"          : "Name",
                     "Job_Owner"         : "User",
@@ -249,7 +264,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                         },
                     "job_state"         : "S",
                     "queue"             : "Queue"
-                    }
+                    }, fill_value = "{}")
         else:
             l1_labels = altair_dict({
                     "resources_used"    : {
@@ -260,7 +275,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                         "walltime"  : "Req'd"
                         }
                     })
-            l2_labels = {
+            l2_labels = altair_dict({
                     "Job_Id"            : "Job ID",
                     "Job_Name"          : "Jobname",
                     "Job_Owner"         : "Username",
@@ -276,9 +291,9 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                             "mem"       : "Memory",
                             "walltime"  : "Time"
                         }
-                    }
+                    }, fill_value = "{}")
             
-        dashes = 30 * "-"
+        dashes = 100 * "-"
         previous_server = None
 
     for jid in jobs:
@@ -291,11 +306,11 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                 previous_server = job["server"]
 
                 if mode == "default":
-                    print(label_fields.format(**labels))
+                    print(label_fields.format_map(labels))
                 else:
                     print("\n{}:".format(previous_server.split(".")[0]))
                     print(label_fields.format_map(l1_labels))
-                    print(label_fields.format(**l2_labels))
+                    print(label_fields.format_map(l2_labels))
                 
                 if keep_dashes:
                     print(re.sub(r"{[^:}]*", r"{0", fields).format(dashes))
@@ -390,6 +405,7 @@ def main(my_root):
                  "-a"           : "display all jobs (default unless -f specified)",
                  "-f"           : "display full output for a job",
                  "-F"           : "full output (-f) in custom format",
+                 "--format"     : "column output in custom format (=help for more)",
                  "-H"           : "job output regardless of state or all finished jobs",
                  "-J"           : "only show information for jobs (or subjobs with -t)",
                  "--noheader"   : "disable labels (no header)",
@@ -408,7 +424,7 @@ def main(my_root):
             parser.add_argument(arg, help = arg_dict[arg], nargs="*")
         elif arg == "-F":
             parser.add_argument(arg, help = arg_dict[arg], choices = ["json"])
-        elif arg in ["--status"]:
+        elif arg in ["--status", "--format"]:
             parser.add_argument(arg, help = arg_dict[arg])
         elif arg in ["-u"]:
             parser.add_argument(arg, help = arg_dict[arg], metavar = "USER")
@@ -416,6 +432,10 @@ def main(my_root):
             parser.add_argument(arg, help = arg_dict[arg], action = "store_true")
     
     args = parser.parse_args()
+
+    if args.format == "help":
+        print(format_help)
+        sys.exit()
 
     # Get configuration information
     try:
@@ -508,7 +528,9 @@ def main(my_root):
                 comments = "   {comment:73.73}"
 
         if args.a or args.u or args.s or args.n:
-            if args.w:
+            if args.format:
+                column_output(jobs, args.format, "alt", header, False, False, False)
+            elif args.w:
                 fields =    "{Job_Id:30} {Job_Owner:15} {queue:15} {Job_Name:15} {session_id:>8} "
                 fields +=   "{Resource_List[nodect]:>4} {Resource_List[ncpus]:>5} {Resource_List[mem]:>6} "
                 fields +=   "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]}"
@@ -518,6 +540,8 @@ def main(my_root):
                 fields +=   "{Resource_List[nodect]:>3} {Resource_List[ncpus]:>3} {Resource_List[mem]:>6} "
                 fields +=   "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]:5}"
                 column_output(jobs, fields, "alt", header, args.n, comments, unified)
+        elif args.format:
+            column_output(jobs, args.format, "default", header, False, False, False)
         elif args.w:
             fields =    "{Job_Id:30} {Job_Name:15} {Job_Owner:15} {resources_used[cput]:>8} "
             fields +=   "{job_state:1} {queue:15}"
