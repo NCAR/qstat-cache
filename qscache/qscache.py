@@ -468,7 +468,7 @@ def main(my_root):
         else:
             parser.add_argument(arg, help = arg_dict[arg], action = "store_true")
 
-    args = parser.parse_args()
+    args, unsupported = parser.parse_known_args()
 
     if args.format == "help":
         print(format_help)
@@ -486,7 +486,10 @@ def main(my_root):
         config["run"]["log"] = "{}/{}-{}.log".format(config["paths"]["logs"], my_username, datetime.now().strftime("%Y%m%d"))
 
     if "QSCACHE_BYPASS" in os.environ:
-        bypass_cache(config, manual)
+        bypass_cache(config, "manual")
+
+    if unsupported:
+        bypass_cache(config, "args")
 
     my_host = socket.gethostname()
     jobs = collections.OrderedDict()
