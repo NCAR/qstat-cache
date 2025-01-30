@@ -14,13 +14,18 @@ def check_paths(config):
                     print("Error: configured {} already exists".format(path))
                     sys.exit(1)
 
-def run_cache_cycle(config, server):
+def run_cache_cycle(config, server, cycle = "active"):
     import subprocess, shutil
 
     # Don't run if already running
-    pid_file = "{}/qscache-pcpid".format(config["paths"]["temp"])
+    pid_file = "{}/qscache-pcpid.{}".format(config["paths"]["temp"], cycle)
 
     try:
+        if cycle == "active":
+            max_age = int(config["cache"]["maxage"])
+        else:
+            max_age = int(config[cycle]["maxage"])
+
         # If we are past the max age, then kill this cycle
         with open(pid_file, "r") as pf:
             pc_pid = pf.read()
@@ -28,7 +33,7 @@ def run_cache_cycle(config, server):
         if not subprocess.call(("kill", "-0", pc_pid), stderr = subprocess.DEVNULL):
             pc_age = subprocess.check_output(("ps", "--noheaders", "-p", pc_pid, "-o", "etimes"))
 
-            if pc_age >= int(config["cache"]["maxage"]):
+            if pc_age >= max_age:
                 os.kill(pc_pid, signal.SIGTERM)
                 os.remove(pid_file)
         else:
@@ -47,16 +52,21 @@ def run_cache_cycle(config, server):
     os.mkdir(cycle_temp)
     cycle_time = timer()
 
+    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fjson"]
+
+    if cycle == "history":
+        pbs_args.append("-x")
+
     json_cleanup = r's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/; s/":\(\.[^,]*\)/":"\1"/; s/\([^\]\)\(\\[^"\/bfnrtu]\)/\1\\\2/g'
     
     if config["pbs"]["prefix"]:
-        qsub = subprocess.Popen("{} {} -t -f -Fjson" .format(config["pbs"]["prefix"], config["pbs"]["qstat"]), shell = True, stdout=subprocess.PIPE)
+        qsub = subprocess.Popen("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout=subprocess.PIPE)
     else:
-        qsub = subprocess.Popen((config["pbs"]["qstat"], "-t", "-f", "-Fjson"), stdout=subprocess.PIPE)
+        qsub = subprocess.Popen(pbs_args, stdout=subprocess.PIPE)
     
     output = subprocess.check_output(("sed", json_cleanup), stdin=qsub.stdout)
 
-    with open(f"{cycle_temp}/active", "wb") as tf:
+    with open(f"{cycle_temp}/{cycle}", "wb") as tf:
         tf.write(output)
 
     if "log" in config["run"]:
@@ -64,22 +74,31 @@ def run_cache_cycle(config, server):
 
         with open(config["run"]["log"], "a") as lf:
             cycle_time = timer() - cycle_time
-            lf.write("{:10} cycle={:9} {:>10.2f} seconds\n".format(timestamp, config["run"]["pid"], cycle_time))
+            lf.write("{:10} cycle={:9} type={:7} {:>10.2f} seconds\n".format(timestamp, config["run"]["pid"], cycle, cycle_time))
 
-    shutil.move(f"{cycle_temp}/active", "{}/{}.active".format(config["paths"]["data"], server))
+    shutil.move(f"{cycle_temp}/{cycle}", "{}/{}-{}.dat".format(config["paths"]["data"], server, cycle))
     os.remove(pid_file)
     shutil.rmtree(cycle_temp)
 
-    with open("{}/{}.updated".format(config["paths"]["data"], server), "w") as uf:
+    with open("{}/{}-{}.age".format(config["paths"]["data"], server, cycle), "w") as uf:
         uf.write(datetime.now().strftime("%s"))
 
 def main():
-    import time
+    import time, argparse
 
     my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 1)[0]
     sys.path.insert(0, f"{my_root}/qscache")
 
     from qscache import read_config
+
+    arg_dict = { "--history"    : "run qstat with -x (expensive)" }
+
+    parser = argparse.ArgumentParser(prog = "gen_data", description = "Generate data for jobs cache.")
+
+    for arg in arg_dict:
+        parser.add_argument(arg, help = arg_dict[arg], action = "store_true")
+
+    args = parser.parse_args()
 
     try:
         server = os.environ["QSCACHE_SERVER"]
@@ -93,16 +112,19 @@ def main():
         config["run"]["log"] = "{}/PBS-{}-{}.log".format(config["paths"]["logs"], server.upper(),
                 datetime.now().strftime("%Y%m%d"))
 
-    start_time = timer()
-    cycle_freq = int(config["cache"]["frequency"])
+    if args.history:
+        run_cache_cycle(config, server, "history")
+    else:
+        start_time = timer()
+        cycle_freq = int(config["cache"]["frequency"])
 
-    while (timer() - start_time) < 60:
-        run_cache_cycle(config, server)
+        while (timer() - start_time) < 60:
+            run_cache_cycle(config, server, "active")
 
-        if cycle_freq < 60:
-            time.sleep(cycle_freq)
-        else:
-            break
+            if cycle_freq < 60:
+                time.sleep(cycle_freq)
+            else:
+                break
 
 if __name__ == "__main__":
     main()

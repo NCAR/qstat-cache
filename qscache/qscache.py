@@ -31,7 +31,7 @@ def log_usage(config, used_cache, info):
 
 def bypass_cache(config, reason, delay = 1):
     import time, subprocess
-    
+
     if not os.path.isfile(config["pbs"]["qstat"]):
         print("Error: PBS cannot be found on this system", file = sys.stderr)
         sys.exit(1)
@@ -39,7 +39,7 @@ def bypass_cache(config, reason, delay = 1):
     time.sleep(int(delay))
     log_usage(config, "no", "reason={}".format(reason))
 
-    args = config["pbs"]["qstat"]
+    args = [config["pbs"]["qstat"]]
     skip_next = False
 
     for arg in sys.argv[1:]:
@@ -112,31 +112,51 @@ def server_checks(config, server_list, server):
 
         return server
 
-def read_data(config, server):
+def update_dict(my_dict, new_dict):
+    import collections.abc
+
+    for k, v in new_dict.items():
+        if isinstance(v, collections.abc.Mapping):
+            my_dict[k] = update_dict(my_dict.get(k, {}), v)
+        else:
+            my_dict[k] = v
+
+    return my_dict
+
+def read_data(config, server, sources):
     from timeit import default_timer as timer
     from time import time
 
-    json_path = "{}/{}.active".format(config["paths"]["data"], server)
-    update_path = "{}/{}.updated".format(config["paths"]["data"], server)
-    start_time = timer()
-    
-    while True:
-        with open(json_path, "r") as jf:
-            try:
-                data = json.load(jf, object_pairs_hook=collections.OrderedDict, strict = False)
-                break
-            except json.decoder.JSONDecodeError:
-                if (timer() - start_time) > int(config["cache"]["maxwait"]):
-                    print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
-                    bypass_cache(config, "nodata")
-                time.sleep(1)
+    for source in sources:
+        if source == "active":
+            max_age = config["cache"]["maxage"]
+        else:
+            max_age = config[source]["maxage"]
 
-    with open(update_path, "r") as uf:
-        cache_time = int(uf.read())
+        json_path = "{}/{}-{}.dat".format(config["paths"]["data"], server, source)
+        age_path = "{}/{}-{}.age".format(config["paths"]["data"], server, source)
+        start_time = timer()
 
-    if (int(time()) - cache_time) >= int(config["cache"]["maxage"]):
-        print("Cached data is more than {} seconds old. Bypassing cache...\n".format(config["cache"]["maxage"]), file = sys.stderr)
-        bypass_cache(config, "olddata", config["cache"]["agedelay"])
+        while True:
+            with open(json_path, "r") as jf:
+                try:
+                    if "data" in locals():
+                        data = update_dict(data, json.load(jf, object_pairs_hook=collections.OrderedDict, strict = False))
+                    else:
+                        data = json.load(jf, object_pairs_hook=collections.OrderedDict, strict = False)
+                    break
+                except json.decoder.JSONDecodeError:
+                    if (timer() - start_time) > int(config["cache"]["maxwait"]):
+                        print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
+                        bypass_cache(config, "nodata")
+                    time.sleep(1)
+
+        with open(age_path, "r") as uf:
+            cache_time = int(uf.read())
+
+        if (int(time()) - cache_time) >= int(max_age):
+            print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
+            bypass_cache(config, "olddata", config["cache"]["agedelay"])
 
     return data
 
@@ -162,7 +182,7 @@ def check_privilege(config, user):
 
     if config["privileges"]["active"] == "True":
         privilege = "default"
-        
+
         for level in ["all", "env"]:
             if user in config[f"priv.{level}"]["users"].split():
                 privilege = level
@@ -178,7 +198,7 @@ def filter_jobs(jobs, user = None, status = None, arrays = False, jobs_only = Fa
         jobs = { job : jobs[job] for job in jobs.keys() if jobs[job]["Job_Owner"].startswith("{}@".format(user)) }
 
     if status:
-        jobs = { job : jobs[job] for job in jobs.keys() if jobs[job]["job_state"] == status }
+        jobs = { job : jobs[job] for job in jobs.keys() if jobs[job]["job_state"] in status }
 
     if arrays:
         if jobs_only:
@@ -200,7 +220,7 @@ def print_nodes(nodes):
         chunk = nodes[:71].rsplit("+", 1)[0] + "+"
         nodes = nodes[len(chunk):]
         print("    {}".format(chunk))
-    
+
     print("    {}".format(nodes))
 
 def column_output(jobs, fields, mode, header, nodes, comment_format, unified, keep_dashes = False):
@@ -250,7 +270,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                 return self.fill_value
 
     fields = re.sub(r":([<>]*)([0-9]+)", r":\1\2.\2", fields)
-    
+
     if header:
         label_fields = fields.replace(">", "")
 
@@ -260,7 +280,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                     "Job_Name"          : "Name",
                     "Job_Owner"         : "User",
                     "resources_used"    : {
-                            "cput"      : "Time Use" 
+                            "cput"      : "Time Use"
                         },
                     "job_state"         : "S",
                     "queue"             : "Queue"
@@ -292,7 +312,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                             "walltime"  : "Time"
                         }
                     }, fill_value = "{}")
-            
+
         dashes = 100 * "-"
         previous_server = None
 
@@ -311,7 +331,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                     print("\n{}:".format(previous_server.split(".")[0]))
                     print(label_fields.format_map(l1_labels))
                     print(label_fields.format_map(l2_labels))
-                
+
                 if keep_dashes:
                     print(re.sub(r"{[^:}]*", r"{0", fields).format(dashes))
                 else:
@@ -331,7 +351,7 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                 job_line += " " + comment_format.format_map(job)
 
         print(job_line)
-        
+
         if nodes and not unified:
             print_nodes(job["exec_host"])
 
@@ -361,7 +381,7 @@ def full_output(jobs, wide):
                             first_line = False
                         else:
                             line = "{},{}={}".format(line, subfield, job[field][subfield])
-                    
+
                     print_wrapped(line, wide, 1)
                 else:
                     for subfield in job[field]:
@@ -369,11 +389,25 @@ def full_output(jobs, wide):
 
         print()
 
+def dsv_output(my_dict, delimiter, prefix = ""):
+    line = ""
+
+    for key, value in my_dict.items():
+        if isinstance(value, dict):
+            if key == "Variable_List":
+                line += "{}={}{}".format(key, dsv_output(value, ","), delimiter)
+            else:
+                line += "{}{}".format(dsv_output(value, delimiter, f"{key}."), delimiter)
+        else:
+            line += f"{prefix}{key}={value}{delimiter}"
+
+    return line[:-1]
+
 def print_wrapped(line, wide = False, extra = 0):
     indent = "    "
     ilen = 4
     my_extra = extra
-    
+
     if not wide:
         while len(line) > (79 - ilen):
             if "," in line[:(79 - ilen)]:
@@ -384,17 +418,17 @@ def print_wrapped(line, wide = False, extra = 0):
                 chunk = line[:(79 - ilen - my_extra)]
                 line = line[(79 - ilen - my_extra):]
                 my_extra = 0
-            
+
             print("{}{}".format(indent, chunk))
             indent = "\t"
             ilen = 8
-    
+
     print("{}{}".format(indent, line))
 
 def main(my_root):
-    import argparse, socket
+    import argparse, socket, getpass
 
-    my_username = os.getlogin()
+    my_username = getpass.getuser()
 
     # Prevent pipe interrupt errors
     from signal import signal, SIGPIPE, SIG_DFL
@@ -403,10 +437,11 @@ def main(my_root):
     arg_dict = { "filters"      : "job IDs or queues",
                  "-1"           : "display node or comment information on job line",
                  "-a"           : "display all jobs (default unless -f specified)",
+                 "-D"           : "specify a delimiter if using -Fdsv (default = '|')",
                  "-f"           : "display full output for a job",
                  "-F"           : "full output (-f) in custom format",
                  "--format"     : "column output in custom format (=help for more)",
-                 "-H"           : "job output regardless of state or all finished jobs",
+                 "-H"           : "all moved or finished jobs / specific job of any state",
                  "-J"           : "only show information for jobs (or subjobs with -t)",
                  "--noheader"   : "disable labels (no header)",
                  "-n"           : "display a list of nodes at the end of the line",
@@ -415,22 +450,24 @@ def main(my_root):
                  "-t"           : "show information for both jobs and array subjobs",
                  "-u"           : "filter jobs by the submitting user",
                  "-w"           : "use wide format output (120 columns)",
-                 "-x"           : "include recently finished jobs in output"    }
+                 "-x"           : "all job records in recent history"    }
 
     parser = argparse.ArgumentParser(prog = "qstat", description = help_text)
 
     for arg in arg_dict:
         if arg == "filters":
             parser.add_argument(arg, help = arg_dict[arg], nargs="*")
+        elif arg == "-D":
+            parser.add_argument(arg, help = arg_dict[arg], default = "|", metavar = "DELIMITER")
         elif arg == "-F":
-            parser.add_argument(arg, help = arg_dict[arg], choices = ["json"])
+            parser.add_argument(arg, help = arg_dict[arg], choices = ["json", "dsv"])
         elif arg in ["--status", "--format"]:
             parser.add_argument(arg, help = arg_dict[arg])
         elif arg in ["-u"]:
             parser.add_argument(arg, help = arg_dict[arg], metavar = "USER")
         else:
             parser.add_argument(arg, help = arg_dict[arg], action = "store_true")
-    
+
     args = parser.parse_args()
 
     if args.format == "help":
@@ -459,6 +496,11 @@ def main(my_root):
     else:
         host_server = server
 
+    sources = ["active"]
+
+    if args.x or args.H:
+        sources = ["history"] + sources
+
     if args.filters:
         ids = {}
         queues = []
@@ -486,9 +528,9 @@ def main(my_root):
 
         for read_server in servers:
             if read_server == server:
-                data = read_data(config, read_server)
+                data = read_data(config, read_server, sources)
             else:
-                temp = read_data(config, read_server)
+                temp = read_data(config, read_server, sources)
                 data["Jobs"].update(temp["Jobs"])
 
         if ids:
@@ -497,15 +539,20 @@ def main(my_root):
         if queues:
             jobs = select_by_queue(jobs, data, queues)
     else:
-        data = read_data(config, server)
+        data = read_data(config, server, sources)
         jobs = select_by_queue(jobs, data, [f"@{host_server}"])
-    
+
     my_privilege = check_privilege(config, my_username)
 
-    if my_privilege in ["all", "env"]:
-        jobs = filter_jobs(jobs, args.u, args.status, args.t, args.J)
+    if args.H:
+        status = "FMX"
     else:
-        jobs = filter_jobs(jobs, my_username, args.status, args.t, args.J)
+        status = args.status
+
+    if my_privilege in ["all", "env"]:
+        jobs = filter_jobs(jobs, args.u, status, args.t, args.J)
+    else:
+        jobs = filter_jobs(jobs, my_username, status, args.t, args.J)
 
     if args.f:
         if my_privilege == "all":
@@ -514,6 +561,9 @@ def main(my_root):
         if args.F == "json":
             data["Jobs"] = jobs
             print(json.dumps(data, indent = 4))
+        elif args.F == "dsv":
+            for job in jobs:
+                print("{}{}".format(f"Job Id: {job}{args.D}", dsv_output(jobs[job], args.D)))
         else:
             full_output(jobs, args.w)
     else:
