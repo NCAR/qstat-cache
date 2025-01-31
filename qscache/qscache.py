@@ -69,6 +69,9 @@ def read_config(path, pkg_root, server = "site"):
                     "agedelay"      : "5",
                     "frequency"     : "60"
                     },
+            "history"               : {
+                    "maxage"        : "600"
+                    },
             "pbs"                   : {
                     "qstat"         : "/opt/pbs/bin/qstat"
                     },
@@ -184,7 +187,9 @@ def check_privilege(config, user):
         privilege = "default"
 
         for level in ["all", "env"]:
-            if user in config[f"priv.{level}"]["users"].split():
+            if config[f"priv.{level}"]["users"] == "*" or config[f"priv.{level}"]["groups"] == "*":
+                privilege = level
+            elif user in config[f"priv.{level}"]["users"].split():
                 privilege = level
             elif any((g for g in config[f"priv.{level}"]["groups"].split() if g in my_groups)):
                 privilege = level
