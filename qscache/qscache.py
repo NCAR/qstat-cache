@@ -207,9 +207,9 @@ def filter_jobs(jobs, user = None, status = None, arrays = False, jobs_only = Fa
 
     if arrays:
         if jobs_only:
-            jobs = { job : jobs[job] for job in jobs.keys() if re.search("\[[0-9]+\]", job) }
+            jobs = { job : jobs[job] for job in jobs.keys() if re.search(r"\[[0-9]+\]", job) }
     else:
-        jobs = { job : jobs[job] for job in jobs.keys() if not re.search("\[[0-9]+\]", job) }
+        jobs = { job : jobs[job] for job in jobs.keys() if not re.search(r"\[[0-9]+\]", job) }
 
     return jobs
 
@@ -377,7 +377,7 @@ def full_output(jobs, wide):
                     for subfield in job[field]:
                         try:
                             if "," in job[field][subfield][1:]:
-                                job[field][subfield] = job[field][subfield][0] + job[field][subfield][1:].replace(",", "\,")
+                                job[field][subfield] = job[field][subfield][0] + job[field][subfield][1:].replace(",", r"\,")
                         except TypeError:
                             pass
 
