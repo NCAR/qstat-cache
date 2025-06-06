@@ -29,7 +29,7 @@ def run_cache_cycle(config, server, cycle = "active"):
         # If we are past the max age, then kill this cycle
         with open(pid_file, "r") as pf:
             pc_pid = pf.read()
-       
+
         if not subprocess.call(("kill", "-0", pc_pid), stderr = subprocess.DEVNULL):
             pc_age = subprocess.check_output(("ps", "--noheaders", "-p", pc_pid, "-o", "etimes"))
 
@@ -52,22 +52,16 @@ def run_cache_cycle(config, server, cycle = "active"):
     os.mkdir(cycle_temp)
     cycle_time = timer()
 
-    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fjson"]
+    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fdsv"]
 
     if cycle == "history":
         pbs_args.append("-x")
 
-    json_cleanup = r's/":\(0[0-9][^,]*\)/":"\1"/; s/":\([0-9]*\)\.,/":"\1\.",/; s/":\(\.[^,]*\)/":"\1"/; s/\([^\]\)\(\\[^"\/bfnrtu]\)/\1\\\2/g'
-    
-    if config["pbs"]["prefix"]:
-        qsub = subprocess.Popen("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout=subprocess.PIPE)
-    else:
-        qsub = subprocess.Popen(pbs_args, stdout=subprocess.PIPE)
-    
-    output = subprocess.check_output(("sed", json_cleanup), stdin=qsub.stdout)
-
     with open(f"{cycle_temp}/{cycle}", "wb") as tf:
-        tf.write(output)
+        if config["pbs"]["prefix"]:
+            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout = tf)
+        else:
+            subprocess.run(pbs_args, stdout = tf)
 
     if "log" in config["run"]:
         timestamp = datetime.now().strftime("%H:%M:%S")

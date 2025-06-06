@@ -126,6 +126,41 @@ def update_dict(my_dict, new_dict):
 
     return my_dict
 
+def read_jobs(dsv_file, split_env = False):
+    job_data = { "Jobs" : {} }
+
+    for line in dsv_file.readlines():
+        data = line.rstrip("\n").split("|")
+        job_id = data[0].split(" ")[-1]
+        job_info = {}
+
+        for item in data[1:]:
+            key, value = item.split("=", maxsplit = 1)
+
+            if "." in key:
+                main_key, sub_key = key.split(".")
+
+                try:
+                    job_info[main_key][sub_key] = value
+                except KeyError:
+                    job_info[main_key] = {sub_key : value }
+            elif split_env and key == "Variable_List":
+                job_info[key] = {}
+
+                for env_var in re.split(r"(?<!\\),", value):
+                    try:
+                        ek, ev = env_var.split("=", maxsplit = 1)
+                        job_info[key][ek] = ev
+                    except ValueError:
+                        print(value)
+                        sys.exit()
+            else:
+                job_info[key] = value
+
+        job_data["Jobs"][job_id] = job_info
+
+    return job_data
+
 def read_data(config, server, sources):
     from timeit import default_timer as timer
     from time import time
@@ -136,19 +171,19 @@ def read_data(config, server, sources):
         else:
             max_age = config[source]["maxage"]
 
-        json_path = "{}/{}-{}.dat".format(config["paths"]["data"], server, source)
+        data_path = "{}/{}-{}.dat".format(config["paths"]["data"], server, source)
         age_path = "{}/{}-{}.age".format(config["paths"]["data"], server, source)
         start_time = timer()
 
         while True:
-            with open(json_path, "r") as jf:
+            with open(data_path, "r") as data_file:
                 try:
                     if "data" in locals():
-                        data = update_dict(data, json.load(jf, object_pairs_hook=collections.OrderedDict, strict = False))
+                        data = update_dict(data, read_jobs(data_file, True))
                     else:
-                        data = json.load(jf, object_pairs_hook=collections.OrderedDict, strict = False)
+                        data = read_jobs(data_file, True)
                     break
-                except json.decoder.JSONDecodeError:
+                except FileNotFoundError:
                     if (timer() - start_time) > int(config["cache"]["maxwait"]):
                         print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
                         bypass_cache(config, "nodata")
@@ -157,7 +192,7 @@ def read_data(config, server, sources):
         with open(age_path, "r") as uf:
             cache_time = int(uf.read())
 
-        if (int(time()) - cache_time) >= int(max_age):
+        if (int(time()) - cache_time) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
             print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
             bypass_cache(config, "olddata", config["cache"]["agedelay"])
 
