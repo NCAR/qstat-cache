@@ -71,7 +71,7 @@ class altair_dict(collections.UserDict):
         else:
             return self.fill_value
 
-def log_usage(config, used_cache, info):
+def log_usage(config, used_cache, info = ""):
     if "log" in config["run"]:
         timestamp = datetime.now().strftime("%H:%M:%S")
 
@@ -489,24 +489,6 @@ def print_wrapped(line, wide = False, extra = 0):
 
     print("{}{}".format(indent, line))
 
-def memory_usage():
-    """Memory usage of the current process in kilobytes."""
-    status = None
-    result = {'peak': 0, 'rss': 0}
-    try:
-        # This will only work on systems with a /proc file system
-        # (like Linux).
-        status = open('/proc/self/status')
-        for line in status:
-            parts = line.split()
-            key = parts[0][2:-1].lower()
-            if key in result:
-                result[key] = int(parts[1])
-    finally:
-        if status is not None:
-            status.close()
-    return result
-
 def main(my_root):
     my_username = getpass.getuser()
 
@@ -591,6 +573,7 @@ def main(my_root):
     header = not args.noheader
     host_data_server, host_pbs_server = get_mapped_server(config, server)
     data_server, pbs_server = host_data_server, host_pbs_server
+    server_info = get_server_info(config, data_server, source)
 
     # Only process environment if full-output (expensive)
     if args.f:
@@ -598,7 +581,6 @@ def main(my_root):
 
         # If JSON output, need to read in header fields
         if args.F == "json":
-            server_info = get_server_info(config, data_server, source)
             print("\n".join(json.dumps(server_info, indent = 4, separators=(', ', ':')).splitlines()[0:4]), end = "")
             global first_job
             first_job = True
@@ -664,6 +646,12 @@ def main(my_root):
 
     if args.f and args.F == "json":
         print("\n    }\n}")
+
+    log_usage(config, "yes")
+
+    if "QSCACHE_DEBUG" in os.environ:
+        cache_date = datetime.fromtimestamp(server_info["timestamp"])
+        print("\nCached at: {}".format(cache_date.strftime("%a %d %b %Y %I:%M:%S %p")), file = sys.stderr)
 
 if __name__ == "__main__":
     main()
