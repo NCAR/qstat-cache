@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
-import os, sys, re, json, collections
+import os, sys, re, json, collections, time, subprocess, grp
+import configparser, socket, argparse, getpass, textwrap
+
+from signal import signal, SIGPIPE, SIG_DFL
 from datetime import datetime
+from timeit import default_timer as timer
+
 
 help_text = """This command provides a lightweight alternative to qstat. Data
 are queried and updated every minute from the PBS job scheduler. Options not
@@ -21,6 +26,51 @@ The default format string for default mode output is:
 {Job_Id:17} {Job_Name:16} {Job_Owner:16} {resources_used[cput]:>8} {job_state:1} {queue:16}
 """
 
+class altair_string(collections.UserString):
+    def __init__(self, value, suffix = "*"):
+        self.value = str(value)
+        self.suffix = suffix
+        self.suffix_width = len(suffix)
+
+        super().__init__(value)
+
+    def __format__(self, fmt):
+        if "." in fmt:
+            allowed_length = int(fmt.rsplit(".")[-1])
+
+            if len(self.value) > allowed_length:
+                self.value = self.value[:(allowed_length - self.suffix_width)] + self.suffix
+
+        return self.value.__format__(fmt)
+
+class altair_dict(collections.UserDict):
+    def __init__(self, dictionary, /, **kwargs):
+        if "fill_value" in kwargs:
+            self.fill_value = kwargs["fill_value"]
+        else:
+            self.fill_value = ""
+
+        for key, value in dictionary.items():
+            if isinstance(value, dict):
+                dictionary[key] = altair_dict(value)
+            elif key == "comment":
+                dictionary[key] = altair_string(value, suffix = "...")
+            elif key != "walltime":
+                dictionary[key] = altair_string(value)
+
+        super().__init__(dictionary)
+
+    def __missing__(self, key):
+        if key in ["resources_used", "Resource_List"]:
+            if "{}" in self.fill_value:
+                return altair_dict({}, fill_value = "{}.{{}}".format(key))
+            else:
+                return altair_dict({}, fill_value = self.fill_value)
+        elif "{}" in self.fill_value:
+            return self.fill_value.format(key)
+        else:
+            return self.fill_value
+
 def log_usage(config, used_cache, info):
     if "log" in config["run"]:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -30,8 +80,6 @@ def log_usage(config, used_cache, info):
                     config["run"]["pid"], f"cache={used_cache}", info, " ".join(sys.argv[1:])))
 
 def bypass_cache(config, reason, delay = 1):
-    import time, subprocess
-
     if not os.path.isfile(config["pbs"]["qstat"]):
         print("Error: PBS cannot be found on this system", file = sys.stderr)
         sys.exit(1)
@@ -49,12 +97,10 @@ def bypass_cache(config, reason, delay = 1):
             args.append(arg)
             skip_next = False
 
-    status = subprocess.check_call(args)
-    sys.exit(status)
+    proc = subprocess.run(args)
+    sys.exit(proc.returncode)
 
 def read_config(path, pkg_root, server = "site"):
-    import configparser, socket
-
     config = configparser.ConfigParser(interpolation = configparser.ExtendedInterpolation())
     config.read_dict({
             "paths"                 : {
@@ -101,121 +147,136 @@ def read_config(path, pkg_root, server = "site"):
 
     return config
 
-def server_checks(config, server_list, server):
+def get_mapped_server(config, server, request = "key"):
     if server in config["servermap"]:
-        if server not in server_list:
-            server_list.append(server)
-
-        return config["servermap"][server]
+        return server, config["servermap"][server]
     else:
-        map_key = [s for s in config["servermap"] if config["servermap"][s] == server][0]
+        return [s for s in config["servermap"] if config["servermap"][s] == server][0], server
 
-        if map_key not in server_list:
-            server_list.append(map_key)
+def get_server_info(config, server, source):
+    if source == "active":
+        max_age = config["cache"]["maxage"]
+    else:
+        max_age = config[source]["maxage"]
 
-        return server
+    age_path = "{}/{}-{}.age".format(config["paths"]["data"], server, source)
+    start_time = timer()
 
-def update_dict(my_dict, new_dict):
-    import collections.abc
-
-    for k, v in new_dict.items():
-        if isinstance(v, collections.abc.Mapping):
-            my_dict[k] = update_dict(my_dict.get(k, {}), v)
-        else:
-            my_dict[k] = v
-
-    return my_dict
-
-def read_jobs(dsv_file, split_env = False):
-    job_data = { "Jobs" : {} }
-
-    for line in dsv_file.readlines():
-        data = line.rstrip("\n").split("|")
-        job_id = data[0].split(" ")[-1]
-        job_info = {}
-
-        for item in data[1:]:
-            key, value = item.split("=", maxsplit = 1)
-
-            if "." in key:
-                main_key, sub_key = key.split(".")
-
-                try:
-                    job_info[main_key][sub_key] = value
-                except KeyError:
-                    job_info[main_key] = {sub_key : value }
-            elif split_env and key == "Variable_List":
-                job_info[key] = {}
-
-                for env_var in re.split(r"(?<!\\),", value):
-                    try:
-                        ek, ev = env_var.split("=", maxsplit = 1)
-                        job_info[key][ek] = ev
-                    except ValueError:
-                        print(value)
-                        sys.exit()
-            else:
-                job_info[key] = value
-
-        job_data["Jobs"][job_id] = job_info
-
-    return job_data
-
-def read_data(config, server, sources):
-    from timeit import default_timer as timer
-    from time import time
-
-    for source in sources:
-        if source == "active":
-            max_age = config["cache"]["maxage"]
-        else:
-            max_age = config[source]["maxage"]
-
-        data_path = "{}/{}-{}.dat".format(config["paths"]["data"], server, source)
-        age_path = "{}/{}-{}.age".format(config["paths"]["data"], server, source)
-        start_time = timer()
-
-        while True:
-            with open(data_path, "r") as data_file:
-                try:
-                    if "data" in locals():
-                        data = update_dict(data, read_jobs(data_file, True))
-                    else:
-                        data = read_jobs(data_file, True)
-                    break
-                except FileNotFoundError:
-                    if (timer() - start_time) > int(config["cache"]["maxwait"]):
-                        print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
-                        bypass_cache(config, "nodata")
-                    time.sleep(1)
-
+    while True:
         with open(age_path, "r") as uf:
-            cache_time = int(uf.read())
+            try:
+                server_info = json.load(uf)
+                break
+            except json.decoder.JSONDecodeError:
+                if (timer() - start_time) > int(config["cache"]["maxwait"]):
+                    print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
+                    bypass_cache(config, "nodata")
+                time.sleep(1)
 
-        if (int(time()) - cache_time) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
-            print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
-            bypass_cache(config, "olddata", config["cache"]["agedelay"])
+    if (int(time.time()) - int(server_info["timestamp"])) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
+        print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
+        bypass_cache(config, "olddata", config["cache"]["agedelay"])
+    else:
+        return server_info
 
-    return data
+def get_job_data(config, server, source, process_env = False, select_ids = None):
+    get_server_info(config, server, source)
+    data_path = "{}/{}-{}.dat".format(config["paths"]["data"], server, source)
+    start_time = timer()
 
-def select_by_id(jobs, data, job_ids):
-    jobs.update({ job : data["Jobs"][job] for job in job_ids if job not in jobs and job in data["Jobs"] and data["Jobs"][job]["server"].startswith(job_ids[job]) })
-    return jobs
+    while True:
+        with open(data_path, "r") as data_file:
+            try:
+                for line in data_file:
+                    data = line.rstrip("\n").split("|-")
+                    job_id = data[0].split(" ")[-1]
 
-def select_by_queue(jobs, data, queues):
-    for q in queues:
-        queue, server = q.split("@")
+                    # Let's not do anything else if not a requested ID
+                    if select_ids and job_id not in select_ids:
+                        continue
 
-        if queue:
-            jobs.update({ job : data["Jobs"][job] for job in data["Jobs"] if job not in jobs and data["Jobs"][job]["queue"] == queue and data["Jobs"][job]["server"].startswith(f"{server}") })
+                    job_info = {}
+
+                    for item in data[1:]:
+                        key, value = item.split("=", maxsplit = 1)
+
+                        if "." in key:
+                            main_key, sub_key = key.split(".")
+
+                            try:
+                                job_info[main_key][sub_key] = value
+                            except KeyError:
+                                job_info[main_key] = {sub_key : value }
+                        elif process_env and key == "Variable_List":
+                            job_info[key] = {}
+                            use_re = False
+
+                            # Try to avoid using lookback-expression, as it is expensive!
+                            for env_var in value.split(","):
+                                try:
+                                    ek, ev = env_var.split("=", maxsplit = 1)
+                                    job_info[key][ek] = ev
+                                except ValueError:
+                                    use_re = True
+                                    break
+
+                            if use_re:
+                                for env_var in re.split(r"(?<!\\),", value):
+                                    ek, ev = env_var.split("=", maxsplit = 1)
+                                    job_info[key][ek] = ev
+                        else:
+                            job_info[key] = value
+
+                    yield job_id, job_info
+
+                break
+            except FileNotFoundError:
+                if (timer() - start_time) > int(config["cache"]["maxwait"]):
+                    print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
+                    bypass_cache(config, "nodata")
+                time.sleep(1)
+
+def check_job(job_id, job_info, select_queue = None, filters = None):
+    if select_queue:
+        name, server = select_queue.split("@")
+
+        if name:
+            if job_info["queue"] != name or not job_info["server"].startswith(f"{server}"):
+                return False
         else:
-            jobs.update({ job : data["Jobs"][job] for job in data["Jobs"] if job not in jobs and data["Jobs"][job]["server"].startswith(f"{server}") })
+            if not job_info["server"].startswith(f"{server}"):
+                return False
 
-    return jobs
+    if filters.u and not job_info["Job_Owner"].startswith(f"{filters.u}@"):
+        return False
+
+    if filters.status and not job_info["job_state"] in filters.status:
+        return False
+
+    if filters.t:
+        if filters.J and not re.search(r"\[[0-9]+\]", job_id):
+            return False
+    elif re.search(r"\[[0-9]+\]", job_id):
+        return False
+
+    return True
+
+def process_jobs(config, data_server, source, header, limit_user, args, ids, process_env):
+    if ids:
+        jobs = {}
+
+        for job_id, job_info in get_job_data(config, data_server, source, process_env, ids):
+            if check_job(job_id, job_info, filters = args):
+                jobs[job_id] = job_info
+
+        try:
+            for job_id in ids:
+                print_job(job_id, jobs[job_id], args, header, limit_user)
+                header = False
+        except KeyError:
+            pass
 
 def check_privilege(config, user):
-    import grp
-
     my_groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
 
     if config["privileges"]["active"] == "True":
@@ -233,27 +294,42 @@ def check_privilege(config, user):
 
     return privilege
 
-def filter_jobs(jobs, user = None, status = None, arrays = False, jobs_only = False):
-    if user:
-        jobs = { job : jobs[job] for job in jobs.keys() if jobs[job]["Job_Owner"].startswith("{}@".format(user)) }
+def print_job(job_id, job_info, settings, header = False, limit_user = None):
+    if settings.f:
+        if limit_user:
+            if not job_info["Job_Owner"].startswith(f"{limit_user}@"):
+                job_info["Variable_List"] = "Hidden"
 
-    if status:
-        jobs = { job : jobs[job] for job in jobs.keys() if jobs[job]["job_state"] in status }
+        if settings.F == "json":
+            global first_job
 
-    if arrays:
-        if jobs_only:
-            jobs = { job : jobs[job] for job in jobs.keys() if re.search(r"\[[0-9]+\]", job) }
+            if first_job:
+                print(',\n    "Jobs":{')
+                first_job = False
+            else:
+                print(",")
+
+            print(textwrap.indent(json.dumps({job_id : job_info}, indent = 4, separators=(',', ':'))[2:-2], "    "), end = "")
+        elif settings.F == "dsv":
+            print("{}{}".format(f"Job Id: {job_id}{settings.D}", dsv_output(job_info, settings.D)))
+        else:
+            full_output(job_id, job_info, settings.w)
     else:
-        jobs = { job : jobs[job] for job in jobs.keys() if not re.search(r"\[[0-9]+\]", job) }
+        comments = None
+        unified = getattr(settings, '1')
 
-    return jobs
+        if settings.s:
+            if settings.w:
+                comments = "   {comment:113.113}"
+            else:
+                comments = "   {comment:73.73}"
 
-def strip_env(jobs, user):
-    for job in jobs:
-        if not jobs[job]["Job_Owner"].startswith(f"{user}@"):
-            jobs[job]["Variable_List"] = "Hidden"
-
-    return jobs
+        if settings.a or settings.u or settings.s or settings.n:
+            column_output(job_id, job_info, settings.format, "alt", header, settings.n, comments, unified)
+        elif settings.w:
+            column_output(job_id, job_info, settings.format, "default", header, settings.n, comments, unified, keep_dashes = True)
+        else:
+            column_output(job_id, job_info, settings.format, "default", header, settings.n, comments, unified)
 
 def print_nodes(nodes):
     while len(nodes) > 71:
@@ -263,52 +339,7 @@ def print_nodes(nodes):
 
     print("    {}".format(nodes))
 
-def column_output(jobs, fields, mode, header, nodes, comment_format, unified, keep_dashes = False):
-    class altair_string(collections.UserString):
-        def __init__(self, value, suffix = "*"):
-            self.value = str(value)
-            self.suffix = suffix
-            self.suffix_width = len(suffix)
-
-            super().__init__(value)
-
-        def __format__(self, fmt):
-            if "." in fmt:
-                allowed_length = int(fmt.rsplit(".")[-1])
-
-                if len(self.value) > allowed_length:
-                    self.value = self.value[:(allowed_length - self.suffix_width)] + self.suffix
-
-            return self.value.__format__(fmt)
-
-    class altair_dict(collections.UserDict):
-        def __init__(self, dictionary, /, **kwargs):
-            if "fill_value" in kwargs:
-                self.fill_value = kwargs["fill_value"]
-            else:
-                self.fill_value = ""
-
-            for key, value in dictionary.items():
-                if isinstance(value, dict):
-                    dictionary[key] = altair_dict(value)
-                elif key == "comment":
-                    dictionary[key] = altair_string(value, suffix = "...")
-                elif key != "walltime":
-                    dictionary[key] = altair_string(value)
-
-            super().__init__(dictionary)
-
-        def __missing__(self, key):
-            if key in ["resources_used", "Resource_List"]:
-                if "{}" in self.fill_value:
-                    return altair_dict({}, fill_value = "{}.{{}}".format(key))
-                else:
-                    return altair_dict({}, fill_value = self.fill_value)
-            elif "{}" in self.fill_value:
-                return self.fill_value.format(key)
-            else:
-                return self.fill_value
-
+def column_output(job_id, job_info, fields, mode, header, nodes, comment_format, unified, keep_dashes = False):
     fields = re.sub(r":([<>]*)([0-9]+)", r":\1\2.\2", fields)
 
     if header:
@@ -354,80 +385,73 @@ def column_output(jobs, fields, mode, header, nodes, comment_format, unified, ke
                     }, fill_value = "{}")
 
         dashes = 100 * "-"
-        previous_server = None
 
-    for jid in jobs:
-        job = altair_dict(jobs[jid], fill_value = " -- ")
-        job["Job_Id"] = altair_string(jid)
-        job["Job_Owner"] = job["Job_Owner"].split("@")[0]
+        if mode == "default":
+            print(label_fields.format_map(labels))
+        else:
+            print("\n{}:".format(job_info["server"].split(".", maxsplit = 1)[0]))
+            print(label_fields.format_map(l1_labels))
+            print(label_fields.format_map(l2_labels))
 
-        if header:
-            if previous_server != job["server"]:
-                previous_server = job["server"]
+        if keep_dashes:
+            print(re.sub(r"{[^:}]*", r"{0", fields).format(dashes))
+        else:
+            dash_fields = re.sub(r"{[^:}]*", r"{0", fields.rsplit(maxsplit = 1)[0]) + " {0:5.5}"
+            print(dash_fields.format(dashes))
 
-                if mode == "default":
-                    print(label_fields.format_map(labels))
-                else:
-                    print("\n{}:".format(previous_server.split(".")[0]))
-                    print(label_fields.format_map(l1_labels))
-                    print(label_fields.format_map(l2_labels))
+    job = altair_dict(job_info, fill_value = " -- ")
+    job["Job_Id"] = altair_string(job_id)
+    job["Job_Owner"] = job["Job_Owner"].split("@")[0]
 
-                if keep_dashes:
-                    print(re.sub(r"{[^:}]*", r"{0", fields).format(dashes))
-                else:
-                    dash_fields = re.sub(r"{[^:}]*", r"{0", fields.rsplit(maxsplit = 1)[0]) + " {0:5.5}"
-                    print(dash_fields.format(dashes))
+    try:
+        job_line = fields.format_map(job)
+    except TypeError:
+        print(job)
+        sys.exit()
 
-        try:
-            job_line = fields.format_map(job)
-        except TypeError:
-            print(job)
-            sys.exit()
+    if unified:
+        if nodes:
+            job_line += " {exec_host}".format_map(job)
+        elif comment_format:
+            job_line += " " + comment_format.format_map(job)
 
-        if unified:
-            if nodes:
-                job_line += " {exec_host}".format_map(job)
-            elif comment_format:
-                job_line += " " + comment_format.format_map(job)
+    print(job_line)
 
-        print(job_line)
+    if nodes and not unified:
+        print_nodes(job["exec_host"])
 
-        if nodes and not unified:
-            print_nodes(job["exec_host"])
+    if comment_format and (not unified or nodes):
+        print(comment_format.format_map(job))
 
-        if comment_format and (not unified or nodes):
-            print(comment_format.format_map(job))
+def full_output(job_id, job_info, wide):
+    print("Job Id: {}".format(job_id))
 
-def full_output(jobs, wide):
-    for jid, job in jobs.items():
-        print("Job Id: {}".format(jid))
+    for field in job_info.keys():
+        if not isinstance(job_info[field], dict):
+            print_wrapped("{} = {}".format(field, job_info[field]), wide)
+        else:
+            if field == "Variable_List":
+                first_line = True
 
-        for field in job.keys():
-            if not isinstance(job[field], dict):
-                print_wrapped("{} = {}".format(field, job[field]), wide)
+                for subfield in job_info[field]:
+                    try:
+                        if "," in job_info[field][subfield][1:]:
+                            job_info[field][subfield] = job_info[field][subfield][0] + job_info[field][subfield][1:].replace(",", r"\,")
+                    except TypeError:
+                        pass
+
+                    if first_line:
+                        line = "{} = {}={}".format(field, subfield, job_info[field][subfield])
+                        first_line = False
+                    else:
+                        line = "{},{}={}".format(line, subfield, job_info[field][subfield])
+
+                print_wrapped(line, wide, 1)
             else:
-                if field == "Variable_List":
-                    first_line = True
+                for subfield in job_info[field]:
+                    print_wrapped("{}.{} = {}".format(field, subfield, job_info[field][subfield]))
 
-                    for subfield in job[field]:
-                        try:
-                            if "," in job[field][subfield][1:]:
-                                job[field][subfield] = job[field][subfield][0] + job[field][subfield][1:].replace(",", r"\,")
-                        except TypeError:
-                            pass
-
-                        if first_line:
-                            line = "{} = {}={}".format(field, subfield, job[field][subfield])
-                            first_line = False
-                        else:
-                            line = "{},{}={}".format(line, subfield, job[field][subfield])
-
-                    print_wrapped(line, wide, 1)
-                else:
-                    for subfield in job[field]:
-                        print_wrapped("{}.{} = {}".format(field, subfield, job[field][subfield]))
-
-        print()
+    print()
 
 def dsv_output(my_dict, delimiter, prefix = ""):
     line = ""
@@ -441,7 +465,7 @@ def dsv_output(my_dict, delimiter, prefix = ""):
         else:
             line += f"{prefix}{key}={value}{delimiter}"
 
-    return line[:-1]
+    return line[:-len(delimiter)]
 
 def print_wrapped(line, wide = False, extra = 0):
     indent = "    "
@@ -465,13 +489,28 @@ def print_wrapped(line, wide = False, extra = 0):
 
     print("{}{}".format(indent, line))
 
-def main(my_root):
-    import argparse, socket, getpass
+def memory_usage():
+    """Memory usage of the current process in kilobytes."""
+    status = None
+    result = {'peak': 0, 'rss': 0}
+    try:
+        # This will only work on systems with a /proc file system
+        # (like Linux).
+        status = open('/proc/self/status')
+        for line in status:
+            parts = line.split()
+            key = parts[0][2:-1].lower()
+            if key in result:
+                result[key] = int(parts[1])
+    finally:
+        if status is not None:
+            status.close()
+    return result
 
+def main(my_root):
     my_username = getpass.getuser()
 
     # Prevent pipe interrupt errors
-    from signal import signal, SIGPIPE, SIG_DFL
     signal(SIGPIPE,SIG_DFL)
 
     arg_dict = { "filters"      : "job IDs or queues",
@@ -532,117 +571,99 @@ def main(my_root):
         bypass_cache(config, "args")
 
     my_host = socket.gethostname()
-    jobs = collections.OrderedDict()
-
-    if server in config["servermap"]:
-        host_server = config["servermap"][server]
-    else:
-        host_server = server
-
-    sources = ["active"]
+    my_privilege = check_privilege(config, my_username)
+    limit_user = None
+    process_env = False
+    source = "active"
 
     if args.x or args.H:
-        sources = ["history"] + sources
-
-    if args.filters:
-        ids = {}
-        queues = []
-        servers = [server]
-
-        for ft in args.filters:
-            if ft[0].isdigit():
-                if "." in ft:
-                    job_id, job_server = ft.split(".")
-                    job_server = server_checks(config, servers, job_server)
-                else:
-                    job_id = ft
-                    job_server = host_server
-
-                ids[f"{job_id}.{job_server}"] = job_server
-            else:
-                if "@" in ft:
-                    queue_name, queue_server = ft.split("@")
-                    queue_server = server_checks(config, servers, queue_server)
-                else:
-                    queue_name = ft
-                    queue_server = host_server
-
-                queues.append(f"{queue_name}@{queue_server}")
-
-        for read_server in servers:
-            if read_server == server:
-                data = read_data(config, read_server, sources)
-            else:
-                temp = read_data(config, read_server, sources)
-                data["Jobs"].update(temp["Jobs"])
-
-        if ids:
-            jobs = select_by_id(jobs, data, ids)
-
-        if queues:
-            jobs = select_by_queue(jobs, data, queues)
-    else:
-        data = read_data(config, server, sources)
-        jobs = select_by_queue(jobs, data, [f"@{host_server}"])
-
-    my_privilege = check_privilege(config, my_username)
+        source = "history"
 
     if args.H:
-        status = "FMX"
-    else:
-        status = args.status
+        args.status = "FMX"
 
-    if my_privilege in ["all", "env"]:
-        jobs = filter_jobs(jobs, args.u, status, args.t, args.J)
-    else:
-        jobs = filter_jobs(jobs, my_username, status, args.t, args.J)
+    if my_privilege not in ["all", "env"]:
+        args.u = my_username
 
+        if my_privilege != "env":
+            limit_user = my_username
+
+    header = not args.noheader
+    host_data_server, host_pbs_server = get_mapped_server(config, server)
+    data_server, pbs_server = host_data_server, host_pbs_server
+
+    # Only process environment if full-output (expensive)
     if args.f:
-        if my_privilege == "all":
-            jobs = strip_env(jobs, my_username)
+        process_env = True
 
+        # If JSON output, need to read in header fields
         if args.F == "json":
-            data["Jobs"] = jobs
-            print(json.dumps(data, indent = 4))
-        elif args.F == "dsv":
-            for job in jobs:
-                print("{}{}".format(f"Job Id: {job}{args.D}", dsv_output(jobs[job], args.D)))
-        else:
-            full_output(jobs, args.w)
+            server_info = get_server_info(config, data_server, source)
+            print("\n".join(json.dumps(server_info, indent = 4, separators=(', ', ':')).splitlines()[0:4]), end = "")
+            global first_job
+            first_job = True
     else:
-        comments = None
-        header = not args.noheader
-        unified = getattr(args, '1')
-
-        if args.s:
-            if args.w:
-                comments = "   {comment:113.113}"
-            else:
-                comments = "   {comment:73.73}"
-
-        if args.a or args.u or args.s or args.n:
-            if args.format:
-                column_output(jobs, args.format, "alt", header, False, False, False)
+        if not args.format:
+            if args.a or args.u or args.s or args.n:
+                if args.w:
+                    args.format =  "{Job_Id:30} {Job_Owner:15} {queue:15} {Job_Name:15} {session_id:>8} "
+                    args.format += "{Resource_List[nodect]:>4} {Resource_List[ncpus]:>5} {Resource_List[mem]:>6} "
+                    args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]}"
+                else:
+                    args.format =  "{Job_Id:15} {Job_Owner:8} {queue:8} {Job_Name:10} {session_id:>6} "
+                    args.format += "{Resource_List[nodect]:>3} {Resource_List[ncpus]:>3} {Resource_List[mem]:>6} "
+                    args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]:5}"
             elif args.w:
-                fields =    "{Job_Id:30} {Job_Owner:15} {queue:15} {Job_Name:15} {session_id:>8} "
-                fields +=   "{Resource_List[nodect]:>4} {Resource_List[ncpus]:>5} {Resource_List[mem]:>6} "
-                fields +=   "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]}"
-                column_output(jobs, fields, "alt", header, args.n, comments, unified)
+                args.format =  "{Job_Id:30} {Job_Name:15} {Job_Owner:15} {resources_used[cput]:>8} "
+                args.format += "{job_state:1} {queue:15}"
             else:
-                fields =    "{Job_Id:15} {Job_Owner:8} {queue:8} {Job_Name:10} {session_id:>6} "
-                fields +=   "{Resource_List[nodect]:>3} {Resource_List[ncpus]:>3} {Resource_List[mem]:>6} "
-                fields +=   "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]:5}"
-                column_output(jobs, fields, "alt", header, args.n, comments, unified)
-        elif args.format:
-            column_output(jobs, args.format, "default", header, False, False, False)
-        elif args.w:
-            fields =    "{Job_Id:30} {Job_Name:15} {Job_Owner:15} {resources_used[cput]:>8} "
-            fields +=   "{job_state:1} {queue:15}"
-            column_output(jobs, fields, "default", header, args.n, comments, unified, keep_dashes = True)
-        else:
-            fields =    "{Job_Id:17} {Job_Name:16} {Job_Owner:16} {resources_used[cput]:>8} "
-            fields +=   "{job_state:1} {queue:16}"
-            column_output(jobs, fields, "default", header, args.n, comments, unified)
+                args.format =  "{Job_Id:17} {Job_Name:16} {Job_Owner:16} {resources_used[cput]:>8} "
+                args.format += "{job_state:1} {queue:16}"
+
+    if args.filters:
+        ids = []
+
+        for ft in args.filters:
+            ft = ft.replace("@", ".")
+
+            if "." in ft:
+                ft_name, ft_server = ft.split(".")
+
+                try:
+                    ft_data_server, ft_pbs_server = get_mapped_server(config, ft_server)
+                except IndexError:
+                    continue
+            else:
+                ft_name = ft
+                ft_data_server = host_data_server
+                ft_pbs_server = host_pbs_server
+
+            if ft_data_server != data_server:
+                process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+                header, ids = not args.noheader, []
+                data_server = ft_data_server
+
+            if ft_name and ft_name[0].isdigit():
+                ids.append(f"{ft_name}.{ft_pbs_server}")
+            else:
+                if ids:
+                    process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+                    header, ids = False, []
+
+                for job_id, job_info in get_job_data(config, data_server, source, process_env):
+                    if check_job(job_id, job_info, select_queue = f"{ft_name}@{ft_pbs_server}", filters = args):
+                        print_job(job_id, job_info, args, header, limit_user)
+                        header = False
+
+        process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+    else:
+        for job_id, job_info in get_job_data(config, data_server, source, process_env):
+            if check_job(job_id, job_info, select_queue = f"@{pbs_server}", filters = args):
+                print_job(job_id, job_info, args, header, limit_user)
+                header = False
+
+    if args.f and args.F == "json":
+        print("\n    }\n}")
 
 if __name__ == "__main__":
     main()

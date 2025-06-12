@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, signal
+import sys, os, signal, time, argparse, subprocess, shutil
 from datetime import datetime
 from timeit import default_timer as timer
 
@@ -15,8 +15,6 @@ def check_paths(config):
                     sys.exit(1)
 
 def run_cache_cycle(config, server, cycle = "active"):
-    import subprocess, shutil
-
     # Don't run if already running
     pid_file = "{}/qscache-pcpid.{}".format(config["paths"]["temp"], cycle)
 
@@ -52,16 +50,23 @@ def run_cache_cycle(config, server, cycle = "active"):
     os.mkdir(cycle_temp)
     cycle_time = timer()
 
-    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fdsv"]
+    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fdsv", "-D\|-"]
+    pbs_time = [config["pbs"]["qstat"], "1", "-f", "-Fjson"]
 
     if cycle == "history":
         pbs_args.append("-x")
 
-    with open(f"{cycle_temp}/{cycle}", "wb") as tf:
+    with open(f"{cycle_temp}/{cycle}", "w") as tf:
         if config["pbs"]["prefix"]:
             subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout = tf)
         else:
             subprocess.run(pbs_args, stdout = tf)
+
+    with open(f"{cycle_temp}/{cycle}.age", "w") as uf:
+        if config["pbs"]["prefix"]:
+            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_time)), shell = True, stdout = uf, stderr = subprocess.DEVNULL)
+        else:
+            subprocess.run(pbs_time, stdout = uf, stderr = subprocess.DEVNULL)
 
     if "log" in config["run"]:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -71,15 +76,11 @@ def run_cache_cycle(config, server, cycle = "active"):
             lf.write("{:10} cycle={:9} type={:7} {:>10.2f} seconds\n".format(timestamp, config["run"]["pid"], cycle, cycle_time))
 
     shutil.move(f"{cycle_temp}/{cycle}", "{}/{}-{}.dat".format(config["paths"]["data"], server, cycle))
+    shutil.move(f"{cycle_temp}/{cycle}.age", "{}/{}-{}.age".format(config["paths"]["data"], server, cycle))
     os.remove(pid_file)
     shutil.rmtree(cycle_temp)
 
-    with open("{}/{}-{}.age".format(config["paths"]["data"], server, cycle), "w") as uf:
-        uf.write(datetime.now().strftime("%s"))
-
 def main():
-    import time, argparse
-
     my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 1)[0]
     sys.path.insert(0, f"{my_root}/qscache")
 
