@@ -82,9 +82,9 @@ def run_cache_cycle(config, server, cycle = "active"):
 
 def main():
     my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 1)[0]
-    sys.path.insert(0, f"{my_root}/qscache")
+    sys.path.insert(0, f"{my_root}/src")
 
-    from qscache import read_config
+    from qscache.qscache import read_config
 
     arg_dict = { "--history"    : "run qstat with -x (expensive)" }
 

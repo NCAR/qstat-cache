@@ -4,7 +4,7 @@ if __name__ == "__main__":
     import os, sys
     
     my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 1)[0]
-    sys.path.insert(0, f"{my_root}/qscache")
+    sys.path.insert(0, f"{my_root}/src")
 
-    from qscache import main
-    main(my_root)
+    from qscache import qscache
+    qscache.main()

@@ -1,4 +1,10 @@
 data
 temp
 logs
-*__pycache__*
+*.pyc
+__pycache__
+dist/
+*.egg-info
+build/
+*.swp
+*.sh

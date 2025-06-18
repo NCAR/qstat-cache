@@ -489,7 +489,8 @@ def print_wrapped(line, wide = False, extra = 0):
 
     print("{}{}".format(indent, line))
 
-def main(my_root):
+def main():
+    my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 2)[0]
     my_username = getpass.getuser()
 
     # Prevent pipe interrupt errors
