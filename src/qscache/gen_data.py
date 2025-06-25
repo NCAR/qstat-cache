@@ -56,7 +56,6 @@ def run_cache_cycle(config, server, cycle = "active"):
     if cycle == "history":
         pbs_args.append("-x")
 
-    print(f"{cycle_temp}/{cycle}")
     with open(f"{cycle_temp}/{cycle}", "w") as tf:
         if config["pbs"]["prefix"]:
             subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout = tf)
