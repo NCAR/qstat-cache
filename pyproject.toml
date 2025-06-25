@@ -29,6 +29,6 @@ homepage = "https://github.com/NCAR/qstat-cache"
 issues = "https://github.com/NCAR/qstat-cache/issues"
 
 [project.scripts]
-qstat = "qstat.qstat:main"
+qstat = "qscache.qscache:main"
 
 [tool.setuptools_scm]

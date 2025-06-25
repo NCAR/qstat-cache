@@ -192,8 +192,9 @@ def get_job_data(config, server, source, process_env = False, select_ids = None)
                     job_id = data[0].split(" ")[-1]
 
                     # Let's not do anything else if not a requested ID
-                    if select_ids and job_id not in select_ids:
-                        continue
+                    if select_ids:
+                        if not any(job_id.startswith(sid) for sid in select_ids):
+                            continue
 
                     job_info = {}
 
@@ -236,7 +237,7 @@ def get_job_data(config, server, source, process_env = False, select_ids = None)
                     bypass_cache(config, "nodata")
                 time.sleep(1)
 
-def check_job(job_id, job_info, select_queue = None, filters = None):
+def check_job(job_id, job_info, select_queue = None, filters = None, subjobs = []):
     if select_queue:
         name, server = select_queue.split("@")
 
@@ -256,21 +257,21 @@ def check_job(job_id, job_info, select_queue = None, filters = None):
     if filters.t:
         if filters.J and not re.search(r"\[[0-9]+\]", job_id):
             return False
-    elif re.search(r"\[[0-9]+\]", job_id):
+    elif job_id not in subjobs and re.search(r"\[[0-9]+\]", job_id):
         return False
 
     return True
 
-def process_jobs(config, data_server, source, header, limit_user, args, ids, process_env):
+def process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env):
     if ids:
         jobs = {}
 
         for job_id, job_info in get_job_data(config, data_server, source, process_env, ids):
-            if check_job(job_id, job_info, filters = args):
+            if check_job(job_id, job_info, filters = args, subjobs = subjobs):
                 jobs[job_id] = job_info
 
         try:
-            for job_id in ids:
+            for job_id in jobs:
                 print_job(job_id, jobs[job_id], args, header, limit_user)
                 header = False
         except KeyError:
@@ -490,7 +491,7 @@ def print_wrapped(line, wide = False, extra = 0):
     print("{}{}".format(indent, line))
 
 def main():
-    my_root = os.path.dirname(os.path.realpath(__file__)).rsplit("/", 2)[0]
+    my_root = os.path.dirname(os.path.realpath(__file__))
     my_username = getpass.getuser()
 
     # Prevent pipe interrupt errors
@@ -542,7 +543,7 @@ def main():
     except KeyError:
         server = "site"
 
-    config = read_config("{}/etc/{}.cfg".format(my_root, server), my_root, server)
+    config = read_config("{}/cfg/{}.cfg".format(my_root, server), my_root, server)
 
     if config["paths"]["logs"]:
         config["run"]["log"] = "{}/{}-{}.log".format(config["paths"]["logs"], my_username, datetime.now().strftime("%Y%m%d"))
@@ -604,7 +605,7 @@ def main():
                 args.format += "{job_state:1} {queue:16}"
 
     if args.filters:
-        ids = []
+        ids, subjobs = [], []
 
         for ft in args.filters:
             ft = ft.replace("@", ".")
@@ -622,15 +623,21 @@ def main():
                 ft_pbs_server = host_pbs_server
 
             if ft_data_server != data_server:
-                process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+                process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
                 header, ids = not args.noheader, []
                 data_server = ft_data_server
 
             if ft_name and ft_name[0].isdigit():
-                ids.append(f"{ft_name}.{ft_pbs_server}")
+                if args.t and ft_name.endswith("[]"):
+                    ids.append(ft_name[:-2])
+                else:
+                    ids.append(f"{ft_name}.{ft_pbs_server}")
+
+                    if "[" in ft_name:
+                        subjobs.append(ids[-1])
             else:
                 if ids:
-                    process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+                    process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
                     header, ids = False, []
 
                 for job_id, job_info in get_job_data(config, data_server, source, process_env):
@@ -638,7 +645,7 @@ def main():
                         print_job(job_id, job_info, args, header, limit_user)
                         header = False
 
-        process_jobs(config, data_server, source, header, limit_user, args, ids, process_env)
+        process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
     else:
         for job_id, job_info in get_job_data(config, data_server, source, process_env):
             if check_job(job_id, job_info, select_queue = f"@{pbs_server}", filters = args):
