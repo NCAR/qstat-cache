@@ -67,11 +67,11 @@ There are two methods for installing **qstat-cache** - using the included
 
 In either case, the following steps are required to finish configuration.
 
-3. In `$PREFIX/src/qscache/cfg`, copy the `site.cfg.example` file to `site.cfg`
-   and customize settings as described below. Alternatively, copy the example to
-   `<system>.cfg` and then set the environment variable
-   `QSCACHE_SERVER=<system>`. The latter approach allows you to cache multiple
-   servers in a complex at the same time.
+3. In `$PREFIX/lib/qscache/cfg` or `lib/python3.x/site-packages/qscache/cfg`,
+   copy the `site.cfg.example` file to `site.cfg` and customize settings as
+   described below. Alternatively, copy the example to `<system>.cfg` and then
+   set the environment variable `QSCACHE_SERVER=<system>`. The latter approach
+   allows you to cache multiple servers in a complex at the same time.
 4. Schedule the `util/gen_data.sh` script to run at regular intervals (typically
    every minute via a cron job).
 7. Add the cached version of `qstat` to your (and your users') environment PATH.
