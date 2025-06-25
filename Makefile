@@ -6,7 +6,6 @@ make install:
 	sed 's|/src|/lib|' bin/qstat > $(PREFIX)/bin/qstat
 	sed 's|/src|/lib|' util/gen_data > $(PREFIX)/util/gen_data
 	cp -r src/qscache $(PREFIX)/lib/qscache
-	cp -r util $(PREFIX)
 	ln -s lib/qscache/cfg $(PREFIX)/cfg
 	chmod +x $(PREFIX)/bin/qstat $(PREFIX)/util/gen_data
 
