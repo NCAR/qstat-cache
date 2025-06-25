@@ -11,11 +11,17 @@ script to serve that data to users. If an option is not cached (e.g., -Q
 output), the query is sent to PBS's version of qstat for processing. Usage:
 
 ```
-usage: qstat [-h] [-1] [-a] [-D DELIMITER] [-f] [-F {json,dsv}] [--format FORMAT] [-H] [-J] [--noheader] [-n] [-s] [--status STATUS] [-t] [-u USER] [-w] [-x] [filters ...]
+usage: qstat [-h] [-1] [-a] [-D DELIMITER] [-f] [-F {json,dsv}]
+                [--format FORMAT] [-H] [-J] [--noheader] [-n] [-s]
+                [--status STATUS] [-t] [-u USER] [-w] [-x] [filters ...]
 
-This command provides a lightweight alternative to qstat. Data are queried and updated every minute from the PBS job scheduler. Options not listed here will be forwarded to the scheduler.
-Please use those options sparingly. Job IDs, if provided, should be numeric only and space delimited. If a destination is provided, it should be a valid execution queue on the chosen
-server. This cached version of qstat does not allow mixed queries from multiple servers - only one server may be specified per request.
+This command provides a lightweight alternative to qstat. Data are queried and
+updated every minute from the PBS job scheduler. Options not listed here will be
+forwarded to the scheduler. Please use those options sparingly. Job IDs, if
+provided, should be numeric only and space delimited. If a destination is
+provided, it should be a valid execution queue on the chosen server. This cached
+version of qstat does not allow mixed queries from multiple servers - only one
+server may be specified per request.
 
 positional arguments:
   filters          job IDs or queues
@@ -42,24 +48,32 @@ options:
 
 ## Installation
 
-There are two methods for installing **qstat-cache** - using the included `Makefile` or with `pip`.
+There are two methods for installing **qstat-cache** - using the included
+`Makefile` or with `pip`.
 
 ### Makefile method
 
 1. Clone this repository on your system.
-2. Install at your desired path using `make install PREFIX=/path/to/qstat-cache`.
+2. Install at your desired path using `make install
+   PREFIX=/path/to/qstat-cache`.
 
 ### pip method
 
-1. If desired, first create a virtual environment with `venv` or `conda/mamba` and activate it.
+1. If desired, first create a virtual environment with `venv` or `conda/mamba`
+   and activate it.
 2. Now run `python3 -m pip install qstat-cache`.
 
 ### Site setup
 
 In either case, the following steps are required to finish configuration.
 
-3. In `$PREFIX/src/qscache/cfg`, copy the `site.cfg.example` file to `site.cfg` and customize settings as described below. Alternatively, copy the example to `<system>.cfg` and then set the environment variable `QSCACHE_SERVER=<system>`. The latter approach allows you to cache multiple servers in a complex at the same time.
-4. Schedule the `util/gen_data.sh` script to run at regular intervals (typically every minute via a cron job).
+3. In `$PREFIX/src/qscache/cfg`, copy the `site.cfg.example` file to `site.cfg`
+   and customize settings as described below. Alternatively, copy the example to
+   `<system>.cfg` and then set the environment variable
+   `QSCACHE_SERVER=<system>`. The latter approach allows you to cache multiple
+   servers in a complex at the same time.
+4. Schedule the `util/gen_data.sh` script to run at regular intervals (typically
+   every minute via a cron job).
 7. Add the cached version of `qstat` to your (and your users') environment PATH.
 
 ### site.cfg settings
@@ -133,9 +147,13 @@ Groups =
 
 ### Example crontab
 
-Here is a sample crontab that will run the gen_data.sh script every minute (sub-minute scheduled is recommended and enabled via the site.cfg). The idea here is to run often enough that users and their workflows are satisfied, but not so often that we put our own load on PBS.
+Here is a sample crontab that will run the `gen_data.sh` script every minute
+(sub-minute scheduled is recommended and enabled via the site.cfg). The idea
+here is to run often enough that users and their workflows are satisfied, but
+not so often that we put our own load on PBS.
 
-Here, we use the `QSCACHE_SERVER` variable to specify a particular system in a multi-server complex.
+Here, we use the `QSCACHE_SERVER` variable to specify a particular system in a
+multi-server complex.
 
 ```
 #   Run qstat cache generation script every minute
@@ -146,8 +164,8 @@ Here, we use the `QSCACHE_SERVER` variable to specify a particular system in a m
 ## Debugging
 
 There are two environment variables you may set to assist in debugging. Setting
-`QSCACHE_DEBUG` will cause qstat to print the age of the cache, assuming it can be
-found.
+`QSCACHE_DEBUG` will cause qstat to print the age of the cache, assuming it can
+be found.
 
 If you set `QSCACHE_BYPASS` to `true`, the cache will be bypassed regardless of
 which options are set, and the scheduler version of qstat will instead be
