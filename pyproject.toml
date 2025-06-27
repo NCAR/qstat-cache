@@ -1,0 +1,34 @@
+# Setuptools version required for PEP 639
+[build-system]
+requires = [
+    "setuptools >= 77.0",
+    "setuptools-scm>=8",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qstat-cache"
+dynamic = [ "version" ]
+authors = [
+    { name="Brian Vanderwende", email="vanderwb@ucar.edu" },
+]
+description = "A caching qstat that reduces load on the PBS server"
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: System :: Distributed Computing",
+]
+
+license = "MIT"
+license-files = ["LICENSE"]
+
+[project.urls]
+homepage = "https://github.com/NCAR/qstat-cache"
+issues = "https://github.com/NCAR/qstat-cache/issues"
+
+[project.scripts]
+qstat = "qscache.qscache:main"
+
+[tool.setuptools_scm]
