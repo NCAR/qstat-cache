@@ -26,6 +26,8 @@ The default format string for default mode output is:
 {Job_Id:17} {Job_Name:16} {Job_Owner:16} {resources_used[cput]:>8} {job_state:1} {queue:16}
 """
 
+DT_NOW=datetime.now()
+
 class altair_string(collections.UserString):
     def __init__(self, value, suffix = "*"):
         self.value = str(value)
@@ -52,28 +54,59 @@ class altair_dict(collections.UserDict):
 
         for key, value in dictionary.items():
             if isinstance(value, dict):
-                dictionary[key] = altair_dict(value)
+                dictionary[key] = altair_dict(value, **kwargs)
             elif key == "comment":
                 dictionary[key] = altair_string(value, suffix = "...")
+            elif key == "start_time" and "process_start" in kwargs:
+                start_time = datetime.strptime(value, "%c")
+                elapsed_secs = start_time.timestamp() - DT_NOW.timestamp()
+
+                if kwargs["process_start"] == "default":
+                    if elapsed_secs <= 0:
+                        dictionary[key] = altair_string("--")
+                    elif start_time.day == DT_NOW.day:
+                        dictionary[key] = altair_string(start_time.strftime("%H:%M"))
+                    elif (start_time.day - DT_NOW.day) < 7:
+                        tmp_str = start_time.strftime("%a%H")
+                        dictionary[key] = altair_string(tmp_str[:2] + " " + tmp_str[3:])
+                    elif start_time.year == DT_NOW.year:
+                        dictionary[key] = altair_string(start_time.strftime("%b"))
+                    elif elapsed_secs <= 157680000:
+                        dictionary[key] = altair_string(start_time.strftime("%Y"))
+                    else:
+                        dictionary[key] = altair_string(">5yrs")
+                else:
+                    if elapsed_secs <= 0:
+                        dictionary[key] = altair_string("--")
+                    elif start_time.day == DT_NOW.day:
+                        dictionary[key] = altair_string("Today " + start_time.strftime("%H:%M"))
+                    elif (start_time.day - DT_NOW.day) < 7:
+                        dictionary[key] = altair_string(start_time.strftime("%a %H:%M"))
+                    elif start_time.year == DT_NOW.year:
+                        dictionary[key] = altair_string(start_time.strftime("%a %b %d %H:%M"))
+                    else:
+                        dictionary[key] = altair_string(value)
             elif key != "walltime":
                 dictionary[key] = altair_string(value)
 
         super().__init__(dictionary)
 
     def __missing__(self, key):
-        if key in ["resources_used", "Resource_List"]:
+        if key in ["resources_used", "Resource_List", "estimated"]:
             if "{}" in self.fill_value:
                 return altair_dict({}, fill_value = "{}.{{}}".format(key))
             else:
                 return altair_dict({}, fill_value = self.fill_value)
         elif "{}" in self.fill_value:
             return self.fill_value.format(key)
+        elif key == "start_time":
+            return "--"
         else:
             return self.fill_value
 
 def log_usage(config, used_cache, info = ""):
     if "log" in config["run"]:
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = DT_NOW.strftime("%H:%M:%S")
 
         with open(config["run"]["log"], "a") as lf:
             lf.write("{:10} {:20} {:10} {:10} {:15} {}\n".format(timestamp, config["run"]["host"],
@@ -207,7 +240,7 @@ def get_job_data(config, server, source, process_env = False, select_ids = None)
                             try:
                                 job_info[main_key][sub_key] = value
                             except KeyError:
-                                job_info[main_key] = {sub_key : value }
+                                job_info[main_key] = {sub_key : value}
                         elif process_env and key == "Variable_List":
                             job_info[key] = {}
                             use_re = False
@@ -325,8 +358,16 @@ def print_job(job_id, job_info, settings, header = False, limit_user = None):
             else:
                 comments = "   {comment:73.73}"
 
-        if settings.a or settings.u or settings.s or settings.n:
-            column_output(job_id, job_info, settings.format, "alt", header, settings.n, comments, unified)
+        if settings.T:
+            if settings.w:
+                process_mode = "wide"
+            else:
+                process_mode = "default"
+        else:
+            process_mode = None
+
+        if settings.a or settings.u or settings.s or settings.n or settings.T:
+            column_output(job_id, job_info, settings.format, "alt", header, settings.n, comments, unified, process_start = process_mode)
         elif settings.w:
             column_output(job_id, job_info, settings.format, "default", header, settings.n, comments, unified, keep_dashes = True)
         else:
@@ -340,7 +381,7 @@ def print_nodes(nodes):
 
     print("    {}".format(nodes))
 
-def column_output(job_id, job_info, fields, mode, header, nodes, comment_format, unified, keep_dashes = False):
+def column_output(job_id, job_info, fields, mode, header, nodes, comment_format, unified, keep_dashes = False, process_start = None):
     fields = re.sub(r":([<>]*)([0-9]+)", r":\1\2.\2", fields)
 
     if header:
@@ -348,40 +389,51 @@ def column_output(job_id, job_info, fields, mode, header, nodes, comment_format,
 
         if mode == "default":
             labels = altair_dict({
-                    "Job_Id"            : "Job id",
-                    "Job_Name"          : "Name",
-                    "Job_Owner"         : "User",
-                    "resources_used"    : {
-                            "cput"      : "Time Use"
+                    "Job_Id"                : "Job id",
+                    "Job_Name"              : "Name",
+                    "Job_Owner"             : "User",
+                    "resources_used"        : {
+                            "cput"          : "Time Use"
                         },
-                    "job_state"         : "S",
-                    "queue"             : "Queue"
+                    "job_state"             : "S",
+                    "queue"                 : "Queue"
                     }, fill_value = "{}")
         else:
+            l0_labels = altair_dict({
+                    "estimated"             : {
+                            "start_time"    : "Est"
+                        }
+                    })
             l1_labels = altair_dict({
-                    "resources_used"    : {
-                            "walltime"  : "Elap"
+                    "resources_used"        : {
+                            "walltime"      : "Elap"
                         },
-                    "Resource_List"     : {
-                        "mem"       : "Req'd",
-                        "walltime"  : "Req'd"
+                    "Resource_List"         : {
+                        "mem"               : "Req'd",
+                        "walltime"          : "Req'd"
+                        },
+                    "estimated"             : {
+                            "start_time"    : "Start"
                         }
                     })
             l2_labels = altair_dict({
-                    "Job_Id"            : "Job ID",
-                    "Job_Name"          : "Jobname",
-                    "Job_Owner"         : "Username",
-                    "resources_used"    : {
-                            "walltime"  : "Time"
+                    "Job_Id"                : "Job ID",
+                    "Job_Name"              : "Jobname",
+                    "Job_Owner"             : "Username",
+                    "resources_used"        : {
+                            "walltime"      : "Time"
                         },
-                    "job_state"         : "S",
-                    "queue"             : "Queue",
-                    "session_id"        : "SessID",
-                    "Resource_List"     : {
-                            "nodect"    : "NDS",
-                            "ncpus"     : "TSK",
-                            "mem"       : "Memory",
-                            "walltime"  : "Time"
+                    "job_state"             : "S",
+                    "queue"                 : "Queue",
+                    "session_id"            : "SessID",
+                    "Resource_List"         : {
+                            "nodect"        : "NDS",
+                            "ncpus"         : "TSK",
+                            "mem"           : "Memory",
+                            "walltime"      : "Time"
+                        },
+                    "estimated"             : {
+                            "start_time"    : "Time"
                         }
                     }, fill_value = "{}")
 
@@ -391,6 +443,10 @@ def column_output(job_id, job_info, fields, mode, header, nodes, comment_format,
             print(label_fields.format_map(labels))
         else:
             print("\n{}:".format(job_info["server"].split(".", maxsplit = 1)[0]))
+
+            if "estimated" in fields:
+                print(label_fields.format_map(l0_labels))
+
             print(label_fields.format_map(l1_labels))
             print(label_fields.format_map(l2_labels))
 
@@ -400,7 +456,11 @@ def column_output(job_id, job_info, fields, mode, header, nodes, comment_format,
             dash_fields = re.sub(r"{[^:}]*", r"{0", fields.rsplit(maxsplit = 1)[0]) + " {0:5.5}"
             print(dash_fields.format(dashes))
 
-    job = altair_dict(job_info, fill_value = " -- ")
+    if process_start:
+        job = altair_dict(job_info, fill_value = " -- ", process_start = process_start)
+    else:
+        job = altair_dict(job_info, fill_value = " -- ")
+
     job["Job_Id"] = altair_string(job_id)
     job["Job_Owner"] = job["Job_Owner"].split("@")[0]
 
@@ -491,14 +551,17 @@ def print_wrapped(line, wide = False, extra = 0):
     print("{}{}".format(indent, line))
 
 def process_custom_format(format_str):
-    old_specs = re.finditer("{([^}]*)}", format_str)
+    old_specs = [spec.group(1) for spec in re.finditer("{([^}]*)}", format_str)]
+
 
     for format_spec in old_specs:
-        if ":" in format_spec.group(1):
-            key, spec = format_spec.group(1).split(":", 1)
-        else:
+        if ":" in format_spec:
+            key, spec = format_spec.split(":", 1)
+        elif format_spec != old_specs[-1]:
             print("Error: custom format fields must have width (e.g., {queue:8})", file = sys.stderr)
             sys.exit(1)
+        else:
+            key = format_spec
 
         if "." in key:
             main_key, sub_key = key.split(".", 1)
@@ -527,6 +590,7 @@ def main():
                  "-s"           : "display administrator comment on the next line",
                  "--status"     : "filter jobs by specific single-character status code",
                  "-t"           : "show information for both jobs and array subjobs",
+                 "-T"           : "displays estimated start time for queued jobs",
                  "-u"           : "filter jobs by the submitting user",
                  "-w"           : "use wide format output (120 columns)",
                  "-x"           : "all job records in recent history"    }
@@ -564,7 +628,7 @@ def main():
     config = read_config("{}/cfg/{}.cfg".format(my_root, server), my_root, server)
 
     if config["paths"]["logs"]:
-        config["run"]["log"] = "{}/{}-{}.log".format(config["paths"]["logs"], my_username, datetime.now().strftime("%Y%m%d"))
+        config["run"]["log"] = "{}/{}-{}.log".format(config["paths"]["logs"], my_username, DT_NOW.strftime("%Y%m%d"))
 
     if "QSCACHE_BYPASS" in os.environ:
         bypass_cache(config, "manual")
@@ -606,15 +670,21 @@ def main():
             first_job = True
     else:
         if not args.format:
-            if args.a or args.u or args.s or args.n:
+            if args.a or args.u or args.s or args.n or args.T:
                 if args.w:
                     args.format =  "{Job_Id:30} {Job_Owner:15} {queue:15} {Job_Name:15} {session_id:>8} "
                     args.format += "{Resource_List[nodect]:>4} {Resource_List[ncpus]:>5} {Resource_List[mem]:>6} "
-                    args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]}"
+                    if args.T:
+                        args.format += "{Resource_List[walltime]:>5} {job_state:1} {estimated[start_time]}"
+                    else:
+                        args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]}"
                 else:
                     args.format =  "{Job_Id:15} {Job_Owner:8} {queue:8} {Job_Name:10} {session_id:>6} "
                     args.format += "{Resource_List[nodect]:>3} {Resource_List[ncpus]:>3} {Resource_List[mem]:>6} "
-                    args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]:5}"
+                    if args.T:
+                        args.format += "{Resource_List[walltime]:>5} {job_state:1} {estimated[start_time]:>5}"
+                    else:
+                        args.format += "{Resource_List[walltime]:>5} {job_state:1} {resources_used[walltime]:>5}"
             elif args.w:
                 args.format =  "{Job_Id:30} {Job_Name:15} {Job_Owner:15} {resources_used[cput]:>8} "
                 args.format += "{job_state:1} {queue:15}"
