@@ -44,7 +44,7 @@ class altair_string(collections.UserString):
         return self.value.__format__(fmt)
 
 class altair_dict(collections.UserDict):
-    def __init__(self, dictionary, /, **kwargs):
+    def __init__(self, dictionary, **kwargs):
         if "fill_value" in kwargs:
             self.fill_value = kwargs["fill_value"]
         else:
@@ -450,7 +450,7 @@ def full_output(job_id, job_info, wide):
                 print_wrapped(line, wide, 1)
             else:
                 for subfield in job_info[field]:
-                    print_wrapped("{}.{} = {}".format(field, subfield, job_info[field][subfield]))
+                    print_wrapped("{}.{} = {}".format(field, subfield, job_info[field][subfield]), wide)
 
     print()
 
@@ -489,6 +489,22 @@ def print_wrapped(line, wide = False, extra = 0):
             ilen = 8
 
     print("{}{}".format(indent, line))
+
+def process_custom_format(format_str):
+    old_specs = re.finditer("{([^}]*)}", format_str)
+
+    for format_spec in old_specs:
+        if ":" in format_spec.group(1):
+            key, spec = format_spec.group(1).split(":", 1)
+        else:
+            print("Error: custom format fields must have width (e.g., {queue:8})", file = sys.stderr)
+            sys.exit(1)
+
+        if "." in key:
+            main_key, sub_key = key.split(".", 1)
+            format_str = format_str.replace(key, f"{main_key}[{sub_key}]")
+
+    return format_str
 
 def main():
     my_root = os.path.dirname(os.path.realpath(__file__))
@@ -536,6 +552,8 @@ def main():
     if args.format == "help":
         print(format_help)
         sys.exit()
+    elif args.format:
+        args.format = process_custom_format(args.format)
 
     # Get configuration information
     try:
