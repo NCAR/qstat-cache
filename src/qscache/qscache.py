@@ -196,15 +196,19 @@ def get_server_info(config, server, source):
     start_time = timer()
 
     while True:
-        with open(age_path, "r") as uf:
-            try:
-                server_info = json.load(uf)
-                break
-            except json.decoder.JSONDecodeError:
-                if (timer() - start_time) > int(config["cache"]["maxwait"]):
-                    print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
-                    bypass_cache(config, "nodata")
-                time.sleep(1)
+        try:
+            with open(age_path, "r") as uf:
+                try:
+                    server_info = json.load(uf)
+                    break
+                except json.decoder.JSONDecodeError:
+                    if (timer() - start_time) > int(config["cache"]["maxwait"]):
+                        print("No data found at configured path. Bypassing cache...\n", file = sys.stderr)
+                        bypass_cache(config, "nodata")
+                    time.sleep(1)
+        except FileNotFoundError:
+            print("Empty cache found for cached qstat. Bypassing cache...\n", file = sys.stderr)
+            bypass_cache(config, "nodata")
 
     if (int(time.time()) - int(server_info["timestamp"])) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
         print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
