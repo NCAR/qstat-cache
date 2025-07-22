@@ -222,7 +222,7 @@ def get_job_data(config, server, source, process_env = False, select_ids = None)
     start_time = timer()
 
     while True:
-        with open(data_path, "r") as data_file:
+        with open(data_path, "r", errors = "ignore") as data_file:
             try:
                 for line in data_file:
                     data = line.rstrip("\n").split("|-")
