@@ -210,11 +210,15 @@ def get_server_info(config, server, source):
             print("Empty cache found for cached qstat. Bypassing cache...\n", file = sys.stderr)
             bypass_cache(config, "nodata")
 
-    if (int(time.time()) - int(server_info["timestamp"])) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
-        print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
-        bypass_cache(config, "olddata", config["cache"]["agedelay"])
-    else:
-        return server_info
+    try:
+        if (int(time.time()) - int(server_info["timestamp"])) >= int(max_age) and "QSCACHE_IGNORE_AGE" not in os.environ:
+            print("{} data is more than {} seconds old. Bypassing cache...\n".format(source, max_age), file = sys.stderr)
+            bypass_cache(config, "olddata", config["cache"]["agedelay"])
+        else:
+            return server_info
+    except ValueError:
+            print("{} cache has metadata errors. Bypassing cache...\n".format(source), file = sys.stderr)
+            bypass_cache(config, "metadata", config["cache"]["agedelay"])
 
 def get_job_data(config, server, source, process_env = False, select_ids = None):
     get_server_info(config, server, source)
