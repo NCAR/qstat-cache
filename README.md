@@ -12,16 +12,17 @@ output), the query is sent to PBS's version of qstat for processing. Usage:
 
 ```
 usage: qstat [-h] [-1] [-a] [-D DELIMITER] [-f] [-F {json,dsv}]
-                [--format FORMAT] [-H] [-J] [--noheader] [-n] [-s]
-                [--status STATUS] [-t] [-u USER] [-w] [-x] [filters ...]
+             [--format FORMAT] [-H] [-J] [--noheader] [-n] [-s]
+             [--status STATUS] [-t] [-T] [-u USER] [-w] [-x]
+             [filters ...]
 
 This command provides a lightweight alternative to qstat. Data are queried and
-updated every minute from the PBS job scheduler. Options not listed here will be
-forwarded to the scheduler. Please use those options sparingly. Job IDs, if
+updated every minute from the PBS job scheduler. Options not listed here will
+be forwarded to the scheduler. Please use those options sparingly. Job IDs, if
 provided, should be numeric only and space delimited. If a destination is
-provided, it should be a valid execution queue on the chosen server. This cached
-version of qstat does not allow mixed queries from multiple servers - only one
-server may be specified per request.
+provided, it should be a valid execution queue on the chosen server. This
+cached version of qstat does not allow mixed queries from multiple servers -
+only one server may be specified per request.
 
 positional arguments:
   filters          job IDs or queues
@@ -41,6 +42,7 @@ options:
   -s               display administrator comment on the next line
   --status STATUS  filter jobs by specific single-character status code
   -t               show information for both jobs and array subjobs
+  -T               displays estimated start time for queued jobs
   -u USER          filter jobs by the submitting user
   -w               use wide format output (120 columns)
   -x               all job records in recent history
