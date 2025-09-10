@@ -124,7 +124,7 @@ def bypass_cache(config, reason, delay = 1):
     skip_next = False
 
     for arg in sys.argv[1:]:
-        if arg.startswith("--"):
+        if arg.startswith("--") and arg != "--version":
             skip_next = True
         elif not skip_next or "-" in arg:
             args.append(arg)
@@ -678,7 +678,7 @@ def main():
             first_job = True
     else:
         if not args.format:
-            if args.a or args.u or args.s or args.n or args.T:
+            if args.a or args.u or args.s or args.n or args.H or args.T:
                 if args.w:
                     args.format =  "{Job_Id:30} {Job_Owner:15} {queue:15} {Job_Name:15} {session_id:>8} "
                     args.format += "{Resource_List[nodect]:>4} {Resource_List[ncpus]:>5} {Resource_List[mem]:>6} "
