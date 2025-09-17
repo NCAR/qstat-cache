@@ -118,7 +118,7 @@ Frequency = 10
 Hosts = login1 login2
 
 [history]
-# This section allows for different settings for caching
+# This section allows for some differing settings for caching
 # historical data vs active job data. Typically you would
 # want to use a slower frequency here since the data size
 # can be large

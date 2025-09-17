@@ -121,7 +121,7 @@ def main(remote = False, util_path = ""):
         cycle = "cache"
 
     if remote:
-        if "Hosts" not in config[cycle]:
+        if "Hosts" not in config["cache"]:
             print("Error: 'Hosts' key missing from cache settings; cannot use remote mode", file = sys.stderr)
             sys.exit(1)
 
@@ -132,7 +132,7 @@ def main(remote = False, util_path = ""):
             with open(host_file, "r") as hf:
                 host = hf.read().rstrip("\n")
         except IOError:
-            host = random.choice(config[cycle]["hosts"].split())
+            host = random.choice(config["cache"]["hosts"].split())
 
         # Call the regular gen_data script on the remote host
         status = subprocess.call(("ssh", host, "{}/gen_data {}".format(util_path, " ".join(sys.argv[1:]))))
