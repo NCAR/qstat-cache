@@ -14,7 +14,7 @@ def check_paths(config):
                     print("Error: configured {} path already exists and is not a directory".format(path), file = sys.stderr)
                     sys.exit(1)
 
-def run_cache_cycle(config, server, cycle = "cache"):
+def run_cache_cycle(config, server, cycle = "active"):
     # Don't run if already running
     host_file = "{}/qscache-host.{}".format(config["paths"]["temp"], cycle)
     pid_file = "{}/qscache-pcpid.{}".format(config["paths"]["temp"], cycle)
@@ -118,13 +118,9 @@ def main(remote = False, util_path = ""):
     if args.history:
         cycle = "history"
     else:
-        cycle = "cache"
+        cycle = "active"
 
     if remote:
-        if "Hosts" not in config["cache"]:
-            print("Error: 'Hosts' key missing from cache settings; cannot use remote mode", file = sys.stderr)
-            sys.exit(1)
-
         # If a cycle is running, make sure we go to the same host
         host_file = "{}/qscache-host.{}".format(config["paths"]["temp"], cycle)
 
@@ -132,7 +128,13 @@ def main(remote = False, util_path = ""):
             with open(host_file, "r") as hf:
                 host = hf.read().rstrip("\n")
         except IOError:
-            host = random.choice(config["cache"]["hosts"].split())
+            if "hosts" in config[cycle]:
+                host = random.choice(config[cycle]["hosts"].split())
+            elif "hosts" in config["cache"]:
+                host = random.choice(config["cache"]["hosts"].split())
+            else:
+                print("Error: 'Hosts' key missing from cache settings; cannot use remote mode", file = sys.stderr)
+                sys.exit(1)
 
         # Call the regular gen_data script on the remote host
         status = subprocess.call(("ssh", host, "{}/gen_data {}".format(util_path, " ".join(sys.argv[1:]))))

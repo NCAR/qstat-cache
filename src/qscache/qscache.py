@@ -178,6 +178,9 @@ def read_config(path, pkg_root, server = "site"):
         print("No site config found for cached qstat. Bypassing cache...\n", file = sys.stderr)
         bypass_cache(config, "nocfg")
 
+    # Duplicate "cache" settings as "active" for easy retrieval
+    config["active"] = config["cache"]
+
     return config
 
 def get_mapped_server(config, server, request = "key"):
@@ -303,20 +306,56 @@ def check_job(job_id, job_info, select_queue = None, filters = None, subjobs = [
 
     return True
 
-def process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env):
+def process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env, status):
+    jobs_found = False
+
     if ids:
-        jobs = {}
+        jobs = {job_id : None for job_id in ids}
 
         for job_id, job_info in get_job_data(config, data_server, source, process_env, ids):
             if check_job(job_id, job_info, filters = args, subjobs = subjobs):
                 jobs[job_id] = job_info
 
+                # Short-circuit job iterator if we have found them all
+                jobs_found = all(v != None for v in jobs.values())
+
+                if jobs_found:
+                    break
+
+        # We need to let the user know if the job is in history, as the real PBS does
+        if source == "active" and not jobs_found:
+            missing_ids = [job_id for job_id in ids if not jobs[job_id]]
+
+            for job_id, job_info in get_job_data(config, data_server, "history", process_env, missing_ids):
+                if check_job(job_id, job_info, filters = args, subjobs = subjobs):
+                    jobs[job_id] = "history"
+
+                    # Short-circuit job iterator if we have found them all
+                    jobs_found = all(v != None for v in jobs.values())
+
+                    if jobs_found:
+                        break
+
         try:
             for job_id in jobs:
-                print_job(job_id, jobs[job_id], args, header, limit_user)
-                header = False
+                if jobs[job_id] == "history":
+                    print(f"qstat: {job_id} Job has finished, use -x or -H to obtain historical job information")
+                elif jobs[job_id]:
+                    print_job(job_id, jobs[job_id], args, header, limit_user)
+                    header = False
+                else:
+                    print(f"qstat: Unknown Job Id {job_id}")
         except KeyError:
             pass
+
+        if not jobs_found:
+            status = 153
+        elif status != 153:
+            if jobs_found:
+                if any(v == "history" for v in jobs.values()):
+                    status = 35
+
+    return status
 
 def check_privilege(config, user):
     my_groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
@@ -646,6 +685,7 @@ def main():
 
     my_host = socket.gethostname()
     my_privilege = check_privilege(config, my_username)
+    my_status = 0
     limit_user = None
     process_env = False
     source = "active"
@@ -719,7 +759,7 @@ def main():
                 ft_pbs_server = host_pbs_server
 
             if ft_data_server != data_server:
-                process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
+                my_status = process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env, my_status)
                 header, ids = not args.noheader, []
                 data_server = ft_data_server
 
@@ -733,7 +773,7 @@ def main():
                         subjobs.append(ids[-1])
             else:
                 if ids:
-                    process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
+                    my_status = process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env, my_status)
                     header, ids = False, []
 
                 for job_id, job_info in get_job_data(config, data_server, source, process_env):
@@ -741,7 +781,7 @@ def main():
                         print_job(job_id, job_info, args, header, limit_user)
                         header = False
 
-        process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env)
+        my_status = process_jobs(config, data_server, source, header, limit_user, args, ids, subjobs, process_env, my_status)
     else:
         for job_id, job_info in get_job_data(config, data_server, source, process_env):
             if check_job(job_id, job_info, select_queue = f"@{pbs_server}", filters = args):
@@ -757,5 +797,7 @@ def main():
         cache_date = datetime.fromtimestamp(server_info["timestamp"])
         print("\nCached at: {}".format(cache_date.strftime("%a %d %b %Y %I:%M:%S %p")), file = sys.stderr)
 
+    return my_status
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
