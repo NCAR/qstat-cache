@@ -111,6 +111,17 @@ AgeDelay = 5
 
 # Specify the sub-minute frequency to generate data
 # in seconds
+Frequency = 10
+
+# If querying data from a remote host, specify the list of
+# available hosts here (space-delimited)
+Hosts = login1 login2
+
+[history]
+# This section allows for different settings for caching
+# historical data vs active job data. Typically you would
+# want to use a slower frequency here since the data size
+# can be large
 Frequency = 60
 
 [pbs]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, signal, time, argparse, subprocess, shutil
+import sys, os, signal, time, argparse, subprocess, shutil, socket, random
 from datetime import datetime
 from timeit import default_timer as timer
 
@@ -11,36 +11,45 @@ def check_paths(config):
                 try:
                     os.makedirs(config["paths"][path])
                 except OSError:
-                    print("Error: configured {} already exists".format(path))
+                    print("Error: configured {} path already exists and is not a directory".format(path), file = sys.stderr)
                     sys.exit(1)
 
-def run_cache_cycle(config, server, cycle = "active"):
+def run_cache_cycle(config, server, cycle = "cache"):
     # Don't run if already running
+    host_file = "{}/qscache-host.{}".format(config["paths"]["temp"], cycle)
     pid_file = "{}/qscache-pcpid.{}".format(config["paths"]["temp"], cycle)
+    max_age = int(config[cycle]["maxage"])
 
     try:
-        if cycle == "active":
-            max_age = int(config["cache"]["maxage"])
-        else:
-            max_age = int(config[cycle]["maxage"])
-
         # If we are past the max age, then kill this cycle
         with open(pid_file, "r") as pf:
             pc_pid = pf.read()
 
         if not subprocess.call(("kill", "-0", pc_pid), stderr = subprocess.DEVNULL):
-            pc_age = subprocess.check_output(("ps", "--noheaders", "-p", pc_pid, "-o", "etimes"))
+            pc_age = int(subprocess.check_output(("ps", "--noheaders", "-p", pc_pid, "-o", "etimes")))
 
             if pc_age >= max_age:
                 os.kill(pc_pid, signal.SIGTERM)
-                os.remove(pid_file)
+
+                try:
+                    os.remove(pid_file)
+                    os.remove(host_file)
+                except FileNotFoundError:
+                    pass
         else:
-            os.remove(pid_file)
-            shutil.rmtree("{}/qscache-{}".format(config["paths"]["temp"], pc_pid))
+            try:
+                os.remove(pid_file)
+                os.remove(host_file)
+                shutil.rmtree("{}/qscache-{}".format(config["paths"]["temp"], pc_pid))
+            except FileNotFoundError:
+                pass
 
         sys.exit(0)
     except IOError:
         pass
+
+    with open(host_file, "w") as hf:
+        hf.write(socket.gethostname())
 
     cycle_temp = "{}/qscache-{}".format(config["paths"]["temp"], config["run"]["pid"])
 
@@ -77,10 +86,15 @@ def run_cache_cycle(config, server, cycle = "active"):
 
     shutil.move(f"{cycle_temp}/{cycle}", "{}/{}-{}.dat".format(config["paths"]["data"], server, cycle))
     shutil.move(f"{cycle_temp}/{cycle}.age", "{}/{}-{}.age".format(config["paths"]["data"], server, cycle))
-    os.remove(pid_file)
-    shutil.rmtree(cycle_temp)
 
-def main():
+    try:
+        os.remove(pid_file)
+        os.remove(host_file)
+        shutil.rmtree(cycle_temp)
+    except FileNotFoundError:
+        pass
+
+def main(remote = False, util_path = ""):
     my_root = os.path.dirname(os.path.realpath(__file__))
     from qscache.qscache import read_config
 
@@ -101,18 +115,37 @@ def main():
     config = read_config("{}/cfg/{}.cfg".format(my_root, server), my_root, server)
     check_paths(config)
 
-    if config["paths"]["logs"]:
-        config["run"]["log"] = "{}/PBS-{}-{}.log".format(config["paths"]["logs"], server.upper(),
-                datetime.now().strftime("%Y%m%d"))
-
     if args.history:
-        run_cache_cycle(config, server, "history")
+        cycle = "history"
     else:
+        cycle = "cache"
+
+    if remote:
+        if "Hosts" not in config[cycle]:
+            print("Error: 'Hosts' key missing from cache settings; cannot use remote mode", file = sys.stderr)
+            sys.exit(1)
+
+        # If a cycle is running, make sure we go to the same host
+        host_file = "{}/qscache-host.{}".format(config["paths"]["temp"], cycle)
+
+        try:
+            with open(host_file, "r") as hf:
+                host = hf.read().rstrip("\n")
+        except IOError:
+            host = random.choice(config[cycle]["hosts"].split())
+
+        # Call the regular gen_data script on the remote host
+        status = subprocess.call(("ssh", host, "{}/gen_data {}".format(util_path, " ".join(sys.argv[1:]))))
+    else:
+        if config["paths"]["logs"]:
+            config["run"]["log"] = "{}/PBS-{}-{}.log".format(config["paths"]["logs"], server.upper(),
+                    datetime.now().strftime("%Y%m%d"))
+
         start_time = timer()
-        cycle_freq = int(config["cache"]["frequency"])
+        cycle_freq = int(config[cycle]["frequency"])
 
         while (timer() - start_time) < 60:
-            run_cache_cycle(config, server, "active")
+            run_cache_cycle(config, server, cycle)
 
             if cycle_freq < 60:
                 time.sleep(cycle_freq)
