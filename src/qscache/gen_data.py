@@ -11,7 +11,7 @@ def check_paths(config):
                 try:
                     os.makedirs(config["paths"][path])
                 except OSError:
-                    print("Error: configured {} path already exists and is not a directory".format(path), file = sys.stderr)
+                    print("Error: cannot create {} path ({})".format(path, config["paths"][path]), file = sys.stderr)
                     sys.exit(1)
 
 def run_cache_cycle(config, server, cycle = "active"):
