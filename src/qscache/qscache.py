@@ -798,7 +798,10 @@ def main():
                 header = False
 
     if args.f and args.F == "json":
-        print("\n    }\n}")
+        if first_job:
+            print("\n}")
+        else:
+            print("\n    }\n}")
 
     log_usage(config, "yes")
 
