@@ -137,7 +137,7 @@ def main(remote = False, util_path = ""):
                 sys.exit(1)
 
         # Call the regular gen_data script on the remote host
-        status = subprocess.call(("ssh", host, "{}/gen_data {}".format(util_path, " ".join(sys.argv[1:]))))
+        status = subprocess.call(("ssh", host, "QSCACHE_SERVER={} {}/gen_data {}".format(server, util_path, " ".join(sys.argv[1:]))))
     else:
         if config["paths"]["logs"]:
             config["run"]["log"] = "{}/PBS-{}-{}.log".format(config["paths"]["logs"], server.upper(),
