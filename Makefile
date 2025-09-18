@@ -5,9 +5,10 @@ make install:
 	mkdir -p $(PREFIX)/bin $(PREFIX)/util $(PREFIX)/lib
 	sed 's|/src|/lib|' bin/qstat > $(PREFIX)/bin/qstat
 	sed 's|/src|/lib|' util/gen_data > $(PREFIX)/util/gen_data
+	sed 's|/src|/lib|' util/gen_data_remote > $(PREFIX)/util/gen_data_remote
 	cp -r src/qscache $(PREFIX)/lib/qscache
 	ln -s lib/qscache/cfg $(PREFIX)/cfg
-	chmod +x $(PREFIX)/bin/qstat $(PREFIX)/util/gen_data
+	chmod +x $(PREFIX)/bin/qstat $(PREFIX)/util/gen_data $(PREFIX)/util/gen_data_remote
 
 build:
 	python3 -m build

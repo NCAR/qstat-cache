@@ -658,7 +658,16 @@ def main():
         else:
             parser.add_argument(arg, help = arg_dict[arg], action = "store_true")
 
-    args, unsupported = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
+
+    # The user may intersperse positional and optional args, so we need to handle that
+    unsupported = []
+
+    for uarg in unknown:
+        if uarg.startswith("-"):
+            unsupported.append(uarg)
+        else:
+            args.filters.append(uarg)
 
     if args.format == "help":
         print(format_help)
