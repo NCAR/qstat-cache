@@ -160,7 +160,7 @@ Groups =
 
 ### Example crontab
 
-Here is a sample crontab that will run the `gen_data.sh` script every minute
+Here is a sample crontab that will run the `gen_data` script every minute
 (sub-minute scheduled is recommended and enabled via the site.cfg). The idea
 here is to run often enough that users and their workflows are satisfied, but
 not so often that we put our own load on PBS.
@@ -171,7 +171,18 @@ multi-server complex.
 ```
 #   Run qstat cache generation script every minute
 #       Added by Joe User on 4 Dec 2019
-* * * * * QSCACHE_SERVER=sitename /path/to/qstat_cache/util/gen_data.sh
+* * * * * QSCACHE_SERVER=sitename /path/to/qstat-cache/util/gen_data
+```
+
+Some sites have multiple login/admin nodes for redundency that can be used to
+generate the cache. To ensure that two nodes are not caching at the same time,
+add one or more hosts to the `Hosts` field in your site.cfg, and then use the
+`gen_data_remote` utility script in your cron job:
+
+```
+#   Run qstat cache generation script every minute
+#       Added by Joe User on 4 Dec 2019
+* * * * * QSCACHE_SERVER=sitename /path/to/qstat-cache/util/gen_data_remote
 ```
 
 ## Debugging

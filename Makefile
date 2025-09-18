@@ -1,5 +1,5 @@
 PREFIX ?= /usr/local
-VERSION := 3.0
+VERSION := 3.0.1
 
 make install:
 	mkdir -p $(PREFIX)/bin $(PREFIX)/util $(PREFIX)/lib
