@@ -756,7 +756,7 @@ def main():
             ft = ft.replace("@", ".")
 
             if "." in ft:
-                ft_name, ft_server = ft.split(".")
+                ft_name, ft_server = ft.split(".")[0:2]
 
                 try:
                     ft_data_server, ft_pbs_server = get_mapped_server(config, ft_server)
