@@ -8,4 +8,8 @@ if __name__ == "__main__":
     sys.path.insert(0, f"{my_root}/src")
 
     from qscache import gen_data
-    gen_data.main(True, util_path)
+
+    try:
+        gen_data.main(True, util_path)
+    except KeyboardInterrupt:
+        sys.exit(130)

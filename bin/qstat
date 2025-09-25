@@ -7,4 +7,8 @@ if __name__ == "__main__":
     sys.path.insert(0, f"{my_root}/src")
 
     from qscache import qscache
-    sys.exit(qscache.main())
+
+    try:
+        sys.exit(qscache.main())
+    except KeyboardInterrupt:
+        sys.exit(130)
