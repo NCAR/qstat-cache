@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-import sys, os, signal, time, argparse, subprocess, shutil, socket, random
+import sys, os, signal, time, argparse, subprocess, shutil, socket, random, shlex
 from datetime import datetime
 from timeit import default_timer as timer
+
+from qscache.qscache import DATA_DELIMITER
 
 def check_paths(config):
     for path in ["data", "temp", "logs"]:
@@ -59,7 +61,7 @@ def run_cache_cycle(config, server, cycle = "active"):
     os.mkdir(cycle_temp)
     cycle_time = timer()
 
-    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fdsv", r"-D\|-"]
+    pbs_args = [config["pbs"]["qstat"], "-t", "-f", "-Fdsv", f"-D{DATA_DELIMITER}"]
     pbs_time = [config["pbs"]["qstat"], "1", "-f", "-Fjson"]
 
     if cycle == "history":
@@ -67,13 +69,13 @@ def run_cache_cycle(config, server, cycle = "active"):
 
     with open(f"{cycle_temp}/{cycle}", "w") as tf:
         if config["pbs"]["prefix"]:
-            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_args)), shell = True, stdout = tf)
+            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(shlex.quote(arg) for arg in pbs_args)), shell = True, stdout = tf)
         else:
             subprocess.run(pbs_args, stdout = tf)
 
     with open(f"{cycle_temp}/{cycle}.age", "w") as uf:
         if config["pbs"]["prefix"]:
-            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(pbs_time)), shell = True, stdout = uf, stderr = subprocess.DEVNULL)
+            subprocess.run("{} {}".format(config["pbs"]["prefix"], " ".join(shlex.quote(arg) for arg in pbs_time)), shell = True, stdout = uf, stderr = subprocess.DEVNULL)
         else:
             subprocess.run(pbs_time, stdout = uf, stderr = subprocess.DEVNULL)
 

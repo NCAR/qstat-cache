@@ -27,6 +27,11 @@ The default format string for default mode output is:
 
 DT_NOW=datetime.now()
 
+# Field delimiter used in the cache data files written by gen_data. PBS escapes
+# any occurrence of the delimiter inside an attribute value with a backslash,
+# so only *unescaped* delimiters actually separate fields.
+DATA_DELIMITER = "|-"
+
 class altair_string(collections.UserString):
     def __init__(self, value, suffix = "*"):
         self.value = str(value)
@@ -235,13 +240,39 @@ def get_job_data(config, server, source, process_env = False, select_ids = None,
             try:
                 for line in data_file:
                     yield_me = True
-                    data = line.rstrip("\n").split("|-")
+                    data = line.rstrip("\n").split(DATA_DELIMITER)
+
+                    # A job ID cannot contain the delimiter, so the first field
+                    # is always intact and we can filter before reassembling
                     job_id = data[0].split(" ")[-1]
 
                     # Let's not do anything else if not a requested ID
                     if select_ids:
                         if not any(job_id.startswith(sid) for sid in select_ids):
                             continue
+
+                    # PBS escapes any delimiter occurring within an attribute
+                    # value, which leaves a trailing backslash on the field
+                    # ahead of it. Stitch those fields back together, dropping
+                    # the escaping backslash as we go. Collect the pieces and
+                    # join each field once, rather than growing a string.
+                    if any(field.endswith("\\") for field in data):
+                        fields = []
+                        pieces = [data[0]]
+
+                        for field in data[1:]:
+                            previous = pieces[-1]
+
+                            # Only an odd-numbered run of backslashes escapes
+                            if (len(previous) - len(previous.rstrip("\\"))) % 2:
+                                pieces[-1] = previous[:-1]
+                                pieces += [DATA_DELIMITER, field]
+                            else:
+                                fields.append("".join(pieces))
+                                pieces = [field]
+
+                        fields.append("".join(pieces))
+                        data = fields
 
                     job_info = {}
 
