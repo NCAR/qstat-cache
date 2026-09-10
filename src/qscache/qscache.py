@@ -737,11 +737,12 @@ def main():
     # These arguments filter by select statement data and thus trigger additional processing
     select_filters = {}
 
-    for arg in config["filters"]:
-        arg_value = getattr(args, arg)
+    if "filters" in config:
+        for arg in config["filters"]:
+            arg_value = getattr(args, arg)
 
-        if arg_value:
-            select_filters[config["filters"][arg]] = arg_value.split(",")
+            if arg_value:
+                select_filters[config["filters"][arg]] = arg_value.split(",")
 
     if my_privilege not in ["all", "env"]:
         args.u = my_username
